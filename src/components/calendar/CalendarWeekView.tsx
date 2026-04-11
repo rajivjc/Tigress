@@ -3,12 +3,17 @@
 // =============================================================================
 // CalendarWeekView
 // =============================================================================
-// Summary grid for the staff /calendar page, second tab. Renders 7 columns
-// (Monday → Sunday) × N table rows. Each cell is a heat indicator based on
-// how many bookings touch that table on that date. Tapping a cell navigates
-// to the day view for that date.
+// Responsive week summary for the staff /calendar page (second tab).
+//
+// - Mobile (< md): vertical list of day cards with a utilisation bar showing
+//   total bookings across all tables for the day, normalised to the busiest
+//   day of the week. Tapping a card jumps to the day view.
+// - Desktop (>= md): 7 columns (Monday → Sunday) × N table rows heat-map.
+//   Each cell colours in proportion to how many bookings touch that table on
+//   that date. Tapping a cell navigates to the day view for that date.
 // =============================================================================
 
+import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { addDaysSGT, todaySGT } from "@/lib/timezone";
 import { formatDateShort } from "@/lib/format";
@@ -19,6 +24,14 @@ export interface CalendarWeekViewProps {
 }
 
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+interface DaySummary {
+  date: string;
+  dayLabel: string;
+  booking_count: number;
+  block_count: number;
+  is_today: boolean;
+}
 
 export function CalendarWeekView({ week }: CalendarWeekViewProps) {
   const router = useRouter();
@@ -31,6 +44,31 @@ export function CalendarWeekView({ week }: CalendarWeekViewProps) {
   const goToWeek = (anchor: string) => {
     router.push(`/calendar?date=${anchor}&view=week`);
   };
+
+  const daySummaries: DaySummary[] = useMemo(() => {
+    return week.dates.map((date, idx) => {
+      let booking_count = 0;
+      let block_count = 0;
+      for (const row of week.grid) {
+        const cell = row[idx];
+        if (!cell) continue;
+        booking_count += cell.booking_count;
+        block_count += cell.block_count;
+      }
+      return {
+        date,
+        dayLabel: DAY_LABELS[idx] ?? "",
+        booking_count,
+        block_count,
+        is_today: date === today,
+      };
+    });
+  }, [week.dates, week.grid, today]);
+
+  const maxBookings = useMemo(
+    () => daySummaries.reduce((acc, d) => Math.max(acc, d.booking_count), 0),
+    [daySummaries]
+  );
 
   return (
     <div className="space-y-4">
@@ -54,52 +92,139 @@ export function CalendarWeekView({ week }: CalendarWeekViewProps) {
         </button>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-white/10 bg-surface-1 p-3">
-        <div
-          className="grid min-w-[560px] gap-1"
-          style={{
-            gridTemplateColumns: `48px repeat(7, minmax(64px, 1fr))`,
-          }}
-        >
-          {/* Header row */}
-          <div />
-          {week.dates.map((date, idx) => {
-            const isToday = date === today;
-            return (
-              <button
-                key={date}
-                type="button"
-                onClick={() => goToDay(date)}
-                className={`rounded-md px-1 py-1 text-center text-[10px] font-semibold uppercase tracking-wider transition-colors ${
-                  isToday
-                    ? "bg-accent/15 text-white"
-                    : "text-white/60 hover:bg-white/5"
-                }`}
-              >
-                <div>{DAY_LABELS[idx]}</div>
-                <div className="text-[9px] font-normal text-white/40">
-                  {date.slice(-2)}
-                </div>
-              </button>
-            );
-          })}
+      {/* Mobile: vertical list of day cards with utilisation bars. */}
+      <div className="space-y-2 md:hidden">
+        {daySummaries.map((day) => (
+          <DayCard
+            key={day.date}
+            day={day}
+            maxBookings={maxBookings}
+            onSelect={() => goToDay(day.date)}
+          />
+        ))}
+      </div>
 
-          {/* Table rows */}
-          {week.tables.map((table, tableIdx) => (
-            <WeekRow
-              key={table.id}
-              tableNumber={table.table_number}
-              cells={week.grid[tableIdx] ?? []}
-              onSelect={goToDay}
-            />
-          ))}
+      {/* Desktop: heat-map grid. */}
+      <div className="hidden md:block">
+        <div className="overflow-x-auto rounded-2xl border border-white/10 bg-surface-1 p-3">
+          <div
+            className="grid min-w-[560px] gap-1"
+            style={{
+              gridTemplateColumns: `48px repeat(7, minmax(64px, 1fr))`,
+            }}
+          >
+            {/* Header row */}
+            <div />
+            {week.dates.map((date, idx) => {
+              const isToday = date === today;
+              return (
+                <button
+                  key={date}
+                  type="button"
+                  onClick={() => goToDay(date)}
+                  className={`rounded-md px-1 py-1 text-center text-[10px] font-semibold uppercase tracking-wider transition-colors ${
+                    isToday
+                      ? "bg-accent/15 text-white"
+                      : "text-white/60 hover:bg-white/5"
+                  }`}
+                >
+                  <div>{DAY_LABELS[idx]}</div>
+                  <div className="text-[9px] font-normal text-white/40">
+                    {date.slice(-2)}
+                  </div>
+                </button>
+              );
+            })}
+
+            {/* Table rows */}
+            {week.tables.map((table, tableIdx) => (
+              <WeekRow
+                key={table.id}
+                tableNumber={table.table_number}
+                cells={week.grid[tableIdx] ?? []}
+                onSelect={goToDay}
+              />
+            ))}
+          </div>
         </div>
       </div>
 
       <p className="px-1 text-center text-[11px] text-white/50">
-        Tap a cell to jump to that day. Intensity = total bookings.
+        <span className="hidden md:inline">
+          Tap a cell to jump to that day. Intensity = total bookings.
+        </span>
+        <span className="md:hidden">
+          Tap a day to see its schedule.
+        </span>
       </p>
     </div>
+  );
+}
+
+function DayCard({
+  day,
+  maxBookings,
+  onSelect,
+}: {
+  day: DaySummary;
+  maxBookings: number;
+  onSelect: () => void;
+}) {
+  // Normalise against the busiest day of the visible week so the bars give
+  // relative (rather than absolute) pressure. If the week is empty we show
+  // a zero-width bar.
+  const fillPct =
+    maxBookings > 0
+      ? Math.max(4, Math.round((day.booking_count / maxBookings) * 100))
+      : 0;
+  const bookingLabel = `${day.booking_count} booking${
+    day.booking_count === 1 ? "" : "s"
+  }`;
+  const extras: string[] = [];
+  if (day.block_count > 0) {
+    extras.push(
+      `${day.block_count} block${day.block_count === 1 ? "" : "s"}`
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`flex w-full flex-col gap-2 rounded-xl border p-3 text-left transition-colors ${
+        day.is_today
+          ? "border-accent/50 bg-accent/10"
+          : "border-white/10 bg-surface-1 hover:bg-white/5"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-white">
+            {day.dayLabel}{" "}
+            <span className="font-normal text-white/70">
+              {formatDateShort(`${day.date}T12:00:00.000Z`).replace(/^\w+\s/, "")}
+            </span>
+          </p>
+          <p className="text-[11px] uppercase tracking-wider text-white/50">
+            {bookingLabel}
+            {extras.length > 0 ? ` · ${extras.join(" · ")}` : ""}
+          </p>
+        </div>
+        {day.is_today && (
+          <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-accent">
+            Today
+          </span>
+        )}
+      </div>
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/5">
+        <div
+          className={`h-full rounded-full transition-[width] ${
+            day.is_today ? "bg-accent" : "bg-accent/60"
+          }`}
+          style={{ width: `${fillPct}%` }}
+        />
+      </div>
+    </button>
   );
 }
 
