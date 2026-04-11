@@ -8,10 +8,13 @@
 // guest details → submit. Posts to createWalkInAction.
 // =============================================================================
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createWalkInAction } from "@/app/actions/walk-in";
+import { getAvailableSlotsAction } from "@/app/actions/bookings";
 import { addDaysSGT, dateAtHourSGT, todaySGT } from "@/lib/timezone";
+import { formatTime } from "@/lib/format";
+import type { TimeSlot } from "@/lib/data/tables";
 
 export interface WalkInFormProps {
   tables: { id: string; table_number: number }[];
@@ -47,6 +50,64 @@ export function WalkInForm({ tables, initialTableId }: WalkInFormProps) {
   const [depositPaid, setDepositPaid] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  const [slots, setSlots] = useState<TimeSlot[] | null>(null);
+  const [slotsLoading, setSlotsLoading] = useState(false);
+
+  // Fetch available slots whenever table + date changes so staff can see
+  // existing bookings/blocks before picking a start time.
+  useEffect(() => {
+    if (!tableId || !date) {
+      setSlots(null);
+      return;
+    }
+    let cancelled = false;
+    setSlotsLoading(true);
+    getAvailableSlotsAction(tableId, date).then((res) => {
+      if (cancelled) return;
+      setSlots(res.slots ?? null);
+      setSlotsLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [tableId, date]);
+
+  const unavailableSlots = (slots ?? []).filter(
+    (s) => !s.available && s.reason !== "Past"
+  );
+
+  // Merge consecutive unavailable slots with the same reason into ranges so
+  // the summary reads as "Booked: 19:00 – 21:00" instead of one line per hour.
+  const unavailableRanges: Array<{
+    reason: string;
+    startIso: string;
+    endIso: string;
+  }> = [];
+  for (const slot of unavailableSlots) {
+    const last = unavailableRanges[unavailableRanges.length - 1];
+    if (
+      last &&
+      last.reason === (slot.reason ?? "Unavailable") &&
+      last.endIso === slot.starts_at
+    ) {
+      last.endIso = slot.ends_at;
+    } else {
+      unavailableRanges.push({
+        reason: slot.reason ?? "Unavailable",
+        startIso: slot.starts_at,
+        endIso: slot.ends_at,
+      });
+    }
+  }
+
+  const selectedStartIso = dateAtHourSGT(date, startHour).toISOString();
+  const selectedEndIso = dateAtHourSGT(date, startHour + duration).toISOString();
+  const selectedConflicts = unavailableSlots.some(
+    (s) =>
+      // overlap check: [startIso,endIso) vs [s.starts_at,s.ends_at)
+      s.starts_at < selectedEndIso && s.ends_at > selectedStartIso
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -117,12 +178,55 @@ export function WalkInForm({ tables, initialTableId }: WalkInFormProps) {
           onChange={(e) => setStartHour(Number(e.target.value))}
           className="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none"
         >
-          {HOURS.map((h) => (
-            <option key={h} value={h}>
-              {String(h).padStart(2, "0")}:00
-            </option>
-          ))}
+          {HOURS.map((h) => {
+            const slotStart = dateAtHourSGT(date, h).toISOString();
+            const match = slots?.find((s) => s.starts_at === slotStart);
+            const busy = match && !match.available && match.reason !== "Past";
+            return (
+              <option key={h} value={h}>
+                {String(h).padStart(2, "0")}:00
+                {busy ? ` — ${match?.reason ?? "Unavailable"}` : ""}
+              </option>
+            );
+          })}
         </select>
+
+        {/* Availability summary so staff can eyeball conflicts without
+            submitting the form first. */}
+        <div className="mt-2 rounded-md border border-white/10 bg-black/20 p-2 text-[11px] text-white/60">
+          {slotsLoading && "Checking availability…"}
+          {!slotsLoading && slots && unavailableRanges.length === 0 && (
+            <span className="text-emerald-300/80">
+              No conflicts on this table today.
+            </span>
+          )}
+          {!slotsLoading && unavailableRanges.length > 0 && (
+            <ul className="space-y-0.5">
+              {unavailableRanges.map((r, idx) => (
+                <li key={idx}>
+                  <span
+                    className={
+                      r.reason === "Blocked"
+                        ? "text-amber-300/90"
+                        : "text-red-300/90"
+                    }
+                  >
+                    {r.reason}:
+                  </span>{" "}
+                  <span className="text-white/70">
+                    {formatTime(r.startIso)} – {formatTime(r.endIso)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {selectedConflicts && !slotsLoading && (
+          <p className="mt-2 rounded-md border border-red-500/30 bg-red-500/10 p-2 text-[11px] text-red-300">
+            Your selected window overlaps an existing booking or block.
+          </p>
+        )}
       </Section>
 
       <Section label="Duration">

@@ -6,6 +6,7 @@ import {
   MemberNotesEditor,
   MemberNotesView,
 } from "@/components/staff/MemberNotesEditor";
+import { LinkStripeCustomerForm } from "@/components/staff/LinkStripeCustomerForm";
 import { getMemberDetailById } from "@/lib/data/members";
 import { getCurrentStaff } from "@/lib/data/staff";
 import {
@@ -36,6 +37,7 @@ export default async function StaffMemberDetailPage({
   const { member, tier, upcomingBookings, pastBookings } = detail;
   const canEditNotes =
     current.role === "manager" || current.role === "owner";
+  const isOwner = current.role === "owner";
 
   return (
     <div className="space-y-4 p-4">
@@ -131,6 +133,15 @@ export default async function StaffMemberDetailPage({
           </ul>
         )}
       </section>
+
+      {isOwner && (
+        <section className="rounded-2xl border border-white/10 bg-surface/60 p-4">
+          <LinkStripeCustomerForm
+            memberId={member.id}
+            initialCustomerId={member.stripe_customer_id}
+          />
+        </section>
+      )}
 
       <section className="rounded-2xl border border-white/10 bg-surface/60 p-4">
         <p className="mb-3 text-[11px] uppercase tracking-wider text-white/40">
