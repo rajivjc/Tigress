@@ -4,6 +4,7 @@ import { StatusDot } from "@/components/ui/StatusDot";
 import { LogoutButton } from "@/components/auth/LogoutButton";
 import { EditProfileForm } from "@/components/member/EditProfileForm";
 import { BookingHistoryList } from "@/components/member/BookingHistoryList";
+import { PushSubscriptionControl } from "@/components/pwa/PushSubscription";
 import { getCurrentAuthUserId, getMemberWithTier } from "@/lib/data/members";
 import { getPastBookings } from "@/lib/data/bookings";
 import { formatMonthDay } from "@/lib/format";
@@ -126,6 +127,14 @@ export default async function ProfilePage() {
         >
           Manage billing (via Stripe)
         </button>
+      </section>
+
+      {/* Notifications */}
+      <section className="rounded-2xl border border-white/10 bg-surface-1 p-5 shadow-xl ">
+        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-white/40">
+          Notifications
+        </h2>
+        <PushSubscriptionControl />
       </section>
 
       {/* History */}
