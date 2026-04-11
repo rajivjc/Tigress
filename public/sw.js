@@ -12,7 +12,7 @@
  * changes so clients drop stale entries on activation.
  */
 
-const CACHE_VERSION = "tigress-v1";
+const CACHE_VERSION = "tigress-v2";
 
 const PRECACHE_URLS = [
   "/offline.html",
@@ -106,4 +106,66 @@ self.addEventListener("fetch", (event) => {
 
   // Everything else (Next.js bundles, API routes, server actions, etc.):
   // pass through to the network untouched.
+});
+
+// ---------------------------------------------------------------------------
+// Push notifications (Session 15)
+// ---------------------------------------------------------------------------
+// Payloads are JSON strings of the shape
+//   { title, body, url?, tag? }
+// dispatched from the server via the `web-push` library. `tag` collapses
+// duplicate notifications (e.g. two invite updates → only the latest shows).
+// `url` tells us where to route when the user taps the notification.
+
+self.addEventListener("push", (event) => {
+  if (!event.data) return;
+
+  let data;
+  try {
+    data = event.data.json();
+  } catch (err) {
+    // Malformed payload — fall back to plain text.
+    data = { title: "Tigress", body: event.data.text() };
+  }
+
+  const title = data.title || "Tigress";
+  const options = {
+    body: data.body || "",
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    tag: data.tag || undefined,
+    data: { url: data.url || "/" },
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+
+  const targetUrl =
+    (event.notification.data && event.notification.data.url) || "/";
+
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((windowClients) => {
+        // If a Tigress tab is already open, focus it and navigate there.
+        for (const client of windowClients) {
+          if (client.url.startsWith(self.location.origin)) {
+            return client.focus().then(() => {
+              if ("navigate" in client) {
+                return client.navigate(targetUrl);
+              }
+              return client;
+            });
+          }
+        }
+        // Otherwise open a fresh window.
+        if (self.clients.openWindow) {
+          return self.clients.openWindow(targetUrl);
+        }
+        return undefined;
+      })
+  );
 });

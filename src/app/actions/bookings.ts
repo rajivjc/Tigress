@@ -9,9 +9,12 @@ import {
   cancelBooking,
   completeExpiredBookings,
   createBooking,
+  getBookingById,
   type CreateBookingInput,
 } from "@/lib/data/bookings";
 import { getAvailableSlots, type TimeSlot } from "@/lib/data/tables";
+import { sendPushToMember, sendPushToMembers } from "@/lib/push/send";
+import { formatDateShort, formatTime } from "@/lib/format";
 
 export async function cancelBookingAction(
   bookingId: string
@@ -25,6 +28,12 @@ export async function cancelBookingAction(
     return { success: false, error: "Member not found" };
   }
 
+  // Capture the booking (with invites) BEFORE cancelling so we can notify
+  // everyone who had accepted the invite. After the row flips to `cancelled`
+  // some queries/views may still return it, but we want to be certain of the
+  // snapshot we saw at cancel time.
+  const snapshot = await getBookingById(bookingId);
+
   const result = await cancelBooking(bookingId, member.id);
   if (result.success) {
     revalidatePath("/dashboard");
@@ -33,6 +42,26 @@ export async function cancelBookingAction(
     revalidatePath("/profile");
     revalidatePath("/floor");
     revalidatePath("/calendar");
+
+    // Fire-and-forget push notification to every accepted invitee. Errors are
+    // swallowed inside sendPushToMembers — a push failure must not block the
+    // cancellation response we return to the UI.
+    if (snapshot) {
+      const acceptedInviteeIds = snapshot.invites
+        .filter((i) => i.status === "accepted")
+        .map((i) => i.invitee_id);
+
+      if (acceptedInviteeIds.length > 0) {
+        const bookerName = snapshot.owner?.full_name ?? "A member";
+        const dateLabel = formatDateShort(snapshot.booking.starts_at);
+        await sendPushToMembers(acceptedInviteeIds, {
+          title: "Session Cancelled",
+          body: `${bookerName}'s session on ${dateLabel} has been cancelled.`,
+          url: "/bookings",
+          tag: `cancel-${bookingId}`,
+        });
+      }
+    }
   }
   return result;
 }
@@ -86,6 +115,27 @@ export async function createBookingAction(
   revalidatePath("/book");
   if (result.booking_id) {
     revalidatePath(`/bookings/${result.booking_id}`);
+  }
+
+  // Fire-and-forget booking-confirmed push. Table number lookup goes through
+  // getBookingById so we get the same shape whether we're in mock or real mode.
+  if (result.booking_id) {
+    const details = await getBookingById(result.booking_id);
+    const tableLabel =
+      details?.table?.table_number != null
+        ? `Table ${details.table.table_number}`
+        : details?.table?.name ?? "Your table";
+    const durationHours = Math.round(
+      (Date.parse(input.ends_at) - Date.parse(input.starts_at)) / 3600000
+    );
+    const dateLabel = formatDateShort(input.starts_at);
+    const timeLabel = formatTime(input.starts_at);
+    await sendPushToMember(member.id, {
+      title: "Booking Confirmed",
+      body: `${tableLabel} booked for ${durationHours}h on ${dateLabel} at ${timeLabel}.`,
+      url: `/bookings/${result.booking_id}`,
+      tag: `booking-${result.booking_id}`,
+    });
   }
 
   return { success: true, bookingId: result.booking_id };
