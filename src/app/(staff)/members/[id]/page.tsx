@@ -7,7 +7,8 @@ import {
   MemberNotesView,
 } from "@/components/staff/MemberNotesEditor";
 import { LinkStripeCustomerForm } from "@/components/staff/LinkStripeCustomerForm";
-import { getMemberDetailById } from "@/lib/data/members";
+import { OwnerMembershipControls } from "@/components/staff/OwnerMembershipControls";
+import { getAllTiers, getMemberDetailById } from "@/lib/data/members";
 import { getCurrentStaff } from "@/lib/data/staff";
 import {
   formatDateShort,
@@ -38,6 +39,7 @@ export default async function StaffMemberDetailPage({
   const canEditNotes =
     current.role === "manager" || current.role === "owner";
   const isOwner = current.role === "owner";
+  const tiers = isOwner ? await getAllTiers() : [];
 
   return (
     <div className="space-y-4 p-4">
@@ -76,6 +78,16 @@ export default async function StaffMemberDetailPage({
           value={formatMonthYear(`${member.join_date}T12:00:00.000Z`)}
         />
       </section>
+
+      {isOwner && (
+        <OwnerMembershipControls
+          memberId={member.id}
+          initialTierId={member.membership_tier_id}
+          initialCredits={member.credits_remaining}
+          initialStatus={member.subscription_status}
+          tiers={tiers}
+        />
+      )}
 
       <section className="rounded-2xl border border-white/10 bg-surface/60 p-4">
         <p className="mb-3 text-[11px] uppercase tracking-wider text-white/40">
