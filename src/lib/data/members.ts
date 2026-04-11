@@ -35,6 +35,8 @@ export interface MemberWithTier {
 /** Returns the current auth user id, from either Supabase or the mock cookie. */
 export async function getCurrentAuthUserId(): Promise<string | null> {
   if (!isSupabaseConfigured()) {
+    // NOTE: cookies() is sync in Next 14. Will need `await cookies()` if
+    // upgrading to Next 15+.
     return cookies().get(MOCK_SESSION_COOKIE)?.value ?? null;
   }
   const supabase = createClient();
@@ -107,6 +109,7 @@ export async function searchMembers(
 
   if (!isSupabaseConfigured()) {
     return MOCK_MEMBERS.filter((m) => {
+      if (m.status !== "active") return false;
       if (excludeIds.includes(m.id)) return false;
       return (
         m.full_name.toLowerCase().includes(term) ||
@@ -123,10 +126,21 @@ export async function searchMembers(
   }
 
   const supabase = createClient();
+
+  // Sanitise the search term before interpolating into PostgREST's `.or()`
+  // filter. The filter syntax treats `(`, `)`, and `,` as structural
+  // characters, so a user supplying them could break out of the filter.
+  // We allow only a conservative alphabet (letters, digits, spaces, `@`,
+  // `.`, `-`, `_`) and then escape the PostgreSQL LIKE wildcards (`%`, `_`)
+  // and backslash so they are treated literally.
+  const allowlisted = term.replace(/[^a-z0-9@.\-_\s]/gi, "");
+  const safeTerm = allowlisted.replace(/[%_\\]/g, "\\$&");
+  if (safeTerm.length === 0) return [];
+
   let queryBuilder = supabase
     .from("members")
     .select("id, full_name, email, membership_tier_id")
-    .or(`full_name.ilike.%${term}%,email.ilike.%${term}%`)
+    .or(`full_name.ilike.%${safeTerm}%,email.ilike.%${safeTerm}%`)
     .eq("status", "active")
     .order("full_name", { ascending: true })
     .limit(10);

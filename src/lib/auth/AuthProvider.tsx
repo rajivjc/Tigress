@@ -105,6 +105,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle();
 
       if (memberRow) {
+        // Block suspended / inactive members from establishing a session.
+        if ((memberRow as Member).status !== "active") {
+          await supabase.auth.signOut();
+          clearAuth();
+          return null;
+        }
         setUser(authUser);
         setProfile(memberRow as Member);
         setRole("member");
@@ -192,6 +198,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const account = findMockAccount(email, password);
         if (!account) {
           return { error: "Invalid email or password" };
+        }
+        if (
+          account.role === "member" &&
+          (account.profile as Member).status !== "active"
+        ) {
+          return {
+            error:
+              "Your account has been suspended. Please contact the club.",
+          };
         }
         applyMockAccount(account);
         try {

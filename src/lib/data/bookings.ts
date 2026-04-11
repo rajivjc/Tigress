@@ -161,6 +161,42 @@ export async function getBookingById(
   return fromSupabaseRow(data as unknown as SupabaseBookingRow);
 }
 
+// ---------- Auto-complete expired bookings ----------
+
+/**
+ * Opportunistic sweep that flips any confirmed booking whose `ends_at` has
+ * passed into the `completed` state. Called from server-rendered pages that
+ * show booking status (floor, dashboard) so the status stays fresh without
+ * needing a dedicated cron job. At Phase 1 scale (~30 members, 7 tables)
+ * this is cheap enough to run on every render.
+ */
+export async function completeExpiredBookings(): Promise<number> {
+  const nowIso = new Date().toISOString();
+
+  if (!isSupabaseConfigured()) {
+    let count = 0;
+    for (const b of MOCK_BOOKINGS) {
+      if (b.status === "confirmed" && b.ends_at < nowIso) {
+        b.status = "completed";
+        b.updated_at = nowIso;
+        count++;
+      }
+    }
+    return count;
+  }
+
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("bookings")
+    .update({ status: "completed" as BookingStatus })
+    .eq("status", "confirmed")
+    .lt("ends_at", nowIso)
+    .select("id");
+
+  if (error) return 0;
+  return (data as { id: string }[] | null)?.length ?? 0;
+}
+
 // ---------- Cancel a booking ----------
 
 export async function cancelBooking(
@@ -178,6 +214,12 @@ export async function cancelBooking(
       return {
         success: false,
         error: "Only confirmed bookings can be cancelled",
+      };
+    }
+    if (Date.parse(row.starts_at) <= Date.now()) {
+      return {
+        success: false,
+        error: "Cannot cancel a booking that has already started",
       };
     }
     row.status = "cancelled";
@@ -206,6 +248,12 @@ export async function cancelBooking(
     return {
       success: false,
       error: "Only confirmed bookings can be cancelled",
+    };
+  }
+  if (Date.parse((existing as Booking).starts_at) <= Date.now()) {
+    return {
+      success: false,
+      error: "Cannot cancel a booking that has already started",
     };
   }
 
@@ -393,6 +441,11 @@ export async function checkSlotAvailability(
 
 // ---------- createBooking ----------
 
+// NOTE: `created_by` stores the domain entity ID (members.id for member
+// bookings, staff.id for walk-ins and admin blocks) — NOT the auth_user_id.
+// The column has no FK constraint, so this convention is enforced by the
+// action layer. Consumers wanting the auth user should join through the
+// appropriate domain table.
 export async function createBooking(
   input: CreateBookingInput
 ): Promise<CreateBookingResult> {
@@ -453,6 +506,15 @@ async function createBookingMock(
   const member = findMockMemberById(input.member_id);
   if (!member) return { success: false, error: "Member not found" };
 
+  // Subscription must be active.
+  if (member.subscription_status !== "active") {
+    return {
+      success: false,
+      error:
+        "Your membership is not active. Please contact the club to renew.",
+    };
+  }
+
   // Credit check.
   if (member.credits_remaining < input.credits_to_use) {
     return {
@@ -474,7 +536,7 @@ async function createBookingMock(
     }
   }
 
-  // Overlap check.
+  // Overlap check on the target table.
   const availability = await checkSlotAvailability(
     input.table_id,
     input.starts_at,
@@ -484,6 +546,21 @@ async function createBookingMock(
     return {
       success: false,
       error: availability.reason ?? "This slot is no longer available",
+    };
+  }
+
+  // Prevent the same member from holding two confirmed bookings at once
+  // (across ANY table).
+  const memberClash = MOCK_BOOKINGS.find(
+    (b) =>
+      b.member_id === input.member_id &&
+      b.status === "confirmed" &&
+      rangesOverlap(input.starts_at, input.ends_at, b.starts_at, b.ends_at)
+  );
+  if (memberClash) {
+    return {
+      success: false,
+      error: "You already have a booking during this time",
     };
   }
 
@@ -562,6 +639,8 @@ function validateWalkInInput(input: CreateWalkInInput): string | null {
   if (input.guest_count < 1) {
     return "Guest count must be at least 1";
   }
+  // Guard: if deposit_paid is true, deposit_required must also be true.
+  // The reverse (required but not yet paid) is valid — staff will collect later.
   if (input.deposit_paid && !input.deposit_required) {
     return "Cannot mark deposit paid when deposit is not required";
   }
@@ -668,7 +747,7 @@ async function createBookingReal(
   const { data: memberRow, error: memberErr } = await supabase
     .from("members")
     .select(
-      "id, credits_remaining, membership_tier_id, membership_tiers(priority_booking_days, name)"
+      "id, credits_remaining, membership_tier_id, subscription_status, membership_tiers(priority_booking_days, name)"
     )
     .eq("id", input.member_id)
     .maybeSingle();
@@ -680,11 +759,20 @@ async function createBookingReal(
     id: string;
     credits_remaining: number;
     membership_tier_id: string | null;
+    subscription_status: string;
     membership_tiers: {
       priority_booking_days: number;
       name: string;
     } | null;
   };
+
+  if (member.subscription_status !== "active") {
+    return {
+      success: false,
+      error:
+        "Your membership is not active. Please contact the club to renew.",
+    };
+  }
 
   if (member.credits_remaining < input.credits_to_use) {
     return {
@@ -705,6 +793,11 @@ async function createBookingReal(
     }
   }
 
+  // NOTE: There is a small TOCTOU window between this availability check and
+  // the booking INSERT below. At Phase 1 scale (~30 members, 7 tables) the
+  // risk is negligible. For Phase 2+, consider a Postgres exclusion constraint
+  // on (table_id, tstzrange(starts_at, ends_at)) with status = 'confirmed'
+  // to enforce overlap prevention at the DB level.
   const availability = await checkSlotAvailability(
     input.table_id,
     input.starts_at,
@@ -714,6 +807,24 @@ async function createBookingReal(
     return {
       success: false,
       error: availability.reason ?? "This slot is no longer available",
+    };
+  }
+
+  // Prevent the same member from holding two confirmed bookings at once
+  // across ANY table.
+  const { data: memberClash, error: clashErr } = await supabase
+    .from("bookings")
+    .select("id")
+    .eq("member_id", input.member_id)
+    .eq("status", "confirmed")
+    .lt("starts_at", input.ends_at)
+    .gt("ends_at", input.starts_at)
+    .limit(1);
+  if (clashErr) return { success: false, error: clashErr.message };
+  if ((memberClash as { id: string }[] | null)?.length) {
+    return {
+      success: false,
+      error: "You already have a booking during this time",
     };
   }
 

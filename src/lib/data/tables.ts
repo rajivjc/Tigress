@@ -453,6 +453,10 @@ function buildMockFloorState(now: Date): {
   bookings: Booking[];
   blocks: BlockedSlot[];
 } {
+  // Mock floor state uses the provided `now` for all relative offsets, which
+  // is always a JS Date in the host's timezone. On Vercel this is UTC; in
+  // local dev it's the developer's timezone. The offsets are relative so this
+  // is correct in both cases.
   const iso = (offsetMin: number) =>
     new Date(now.getTime() + offsetMin * 60 * 1000).toISOString();
   const fixed = "2025-01-01T00:00:00.000Z";

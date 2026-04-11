@@ -11,11 +11,39 @@ interface RegisterPayload {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// ---- Module-level in-memory rate limiter ----
+// Keyed on client IP, 5 requests per 15 minutes. Phase 1 runs on a single
+// Vercel region so a simple in-memory Map is sufficient; if we ever scale to
+// multiple regions this must be swapped for a shared store (Redis, Upstash).
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+const RATE_LIMIT_MAX = 5;
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+
+function isRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return false;
+  }
+  entry.count++;
+  return entry.count > RATE_LIMIT_MAX;
+}
+
 function bad(error: string, status = 400) {
   return NextResponse.json({ error }, { status });
 }
 
 export async function POST(request: Request) {
+  const ip =
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  if (isRateLimited(ip)) {
+    return bad(
+      "Too many registration attempts. Please try again later.",
+      429
+    );
+  }
+
   let body: RegisterPayload;
   try {
     body = (await request.json()) as RegisterPayload;

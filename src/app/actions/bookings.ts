@@ -7,6 +7,7 @@ import {
 } from "@/lib/data/members";
 import {
   cancelBooking,
+  completeExpiredBookings,
   createBooking,
   type CreateBookingInput,
 } from "@/lib/data/bookings";
@@ -30,8 +31,22 @@ export async function cancelBookingAction(
     revalidatePath("/bookings");
     revalidatePath(`/bookings/${bookingId}`);
     revalidatePath("/profile");
+    revalidatePath("/floor");
+    revalidatePath("/calendar");
   }
   return result;
+}
+
+/**
+ * Sweeps any confirmed bookings whose end time has passed and flips them to
+ * `completed`. This is called opportunistically from server-rendered pages
+ * (floor, dashboard) instead of a cron job — good enough for Phase 1 scale.
+ */
+export async function completeExpiredBookingsAction(): Promise<{
+  count: number;
+}> {
+  const count = await completeExpiredBookings();
+  return { count };
 }
 
 export interface CreateBookingActionInput {
