@@ -26,18 +26,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Returns the staff role for the current auth user (or NULL if not staff)
-CREATE OR REPLACE FUNCTION public.get_staff_role()
-RETURNS text AS $$
-  SELECT role FROM public.staff WHERE auth_user_id = auth.uid()
-$$ LANGUAGE sql SECURITY DEFINER STABLE;
-
--- Returns the member id for the current auth user (or NULL if not a member)
-CREATE OR REPLACE FUNCTION public.get_member_id()
-RETURNS uuid AS $$
-  SELECT id FROM public.members WHERE auth_user_id = auth.uid()
-$$ LANGUAGE sql SECURITY DEFINER STABLE;
-
 -- =============================================================================
 -- Tables
 -- =============================================================================
@@ -208,6 +196,24 @@ CREATE TABLE public.audit_log (
   metadata    jsonb DEFAULT '{}'::jsonb,
   created_at  timestamptz DEFAULT now()
 );
+
+-- =============================================================================
+-- Auth helper functions
+-- =============================================================================
+-- These are defined after the tables they reference (public.staff, public.members)
+-- so the migration can be applied as a single script.
+
+-- Returns the staff role for the current auth user (or NULL if not staff)
+CREATE OR REPLACE FUNCTION public.get_staff_role()
+RETURNS text AS $$
+  SELECT role FROM public.staff WHERE auth_user_id = auth.uid()
+$$ LANGUAGE sql SECURITY DEFINER STABLE;
+
+-- Returns the member id for the current auth user (or NULL if not a member)
+CREATE OR REPLACE FUNCTION public.get_member_id()
+RETURNS uuid AS $$
+  SELECT id FROM public.members WHERE auth_user_id = auth.uid()
+$$ LANGUAGE sql SECURITY DEFINER STABLE;
 
 -- =============================================================================
 -- Indexes
