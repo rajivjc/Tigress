@@ -13,6 +13,7 @@ import type {
   Member,
   MembershipTier,
   Table,
+  WalkInGuest,
 } from "@/lib/types";
 
 const isoNow = () => new Date().toISOString();
@@ -382,6 +383,12 @@ export const MOCK_INVITED_BOOKINGS: Booking[] = [
     updated_at: fixedCreatedAt,
   },
 ];
+
+/**
+ * In-memory walk-in guest rows. New rows are pushed by `createWalkIn` so the
+ * staff calendar can show their guest names.
+ */
+export const MOCK_WALK_IN_GUESTS: WalkInGuest[] = [];
 
 export function allMockBookings(): Booking[] {
   return [...MOCK_BOOKINGS, ...MOCK_INVITED_BOOKINGS];

@@ -1,13 +1,17 @@
-import { PlaceholderPage } from "@/components/ui/PlaceholderPage";
-import { ROLES } from "@/lib/constants";
+import { redirect } from "next/navigation";
+import { MembersList } from "@/components/staff/MembersList";
+import { getAllMembers } from "@/lib/data/members";
+import { getCurrentStaff } from "@/lib/data/staff";
 
-export default function StaffMembersPage() {
-  return (
-    <PlaceholderPage
-      title="Members"
-      route="/members"
-      role={ROLES.MANAGER}
-      description="Manage membership records, tiers and access."
-    />
-  );
+export const dynamic = "force-dynamic";
+
+export default async function StaffMembersPage() {
+  const current = await getCurrentStaff();
+  if (!current) {
+    redirect("/login");
+  }
+
+  const members = await getAllMembers();
+
+  return <MembersList initialMembers={members} />;
 }

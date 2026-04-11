@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { BookingFlow } from "@/components/booking/BookingFlow";
 import { getCurrentAuthUserId, getMemberWithTier } from "@/lib/data/members";
 import { getTablesWithStatus } from "@/lib/data/tables";
+import { addDaysSGT, todaySGT } from "@/lib/timezone";
 
 export const dynamic = "force-dynamic";
 
@@ -29,15 +30,12 @@ export default async function BookPage() {
 
   const tables = await getTablesWithStatus();
 
-  // Compute today + the maximum bookable date server-side so the client
-  // component's initial state is deterministic across SSR/hydration.
+  // Compute today + the maximum bookable date in Singapore time so the
+  // initial state is deterministic across SSR/hydration regardless of which
+  // timezone the server happens to be in.
   const priorityDays = profile.tier?.priority_booking_days ?? 3;
-  const today = localDateIso(new Date());
-  const maxDate = (() => {
-    const d = new Date();
-    d.setDate(d.getDate() + priorityDays);
-    return localDateIso(d);
-  })();
+  const today = todaySGT();
+  const maxDate = addDaysSGT(today, priorityDays);
 
   return (
     <BookingFlow
@@ -49,11 +47,4 @@ export default async function BookPage() {
       maxDate={maxDate}
     />
   );
-}
-
-function localDateIso(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
 }

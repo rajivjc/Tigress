@@ -10,6 +10,8 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { dateAtHourSGT, startOfDaySGT, todaySGT } from "@/lib/timezone";
+import { isMockTableUnblocked } from "./blocks";
 import {
   MOCK_TABLES,
   MOCK_BOOKINGS,
@@ -236,6 +238,79 @@ function computeStatus(
   return base;
 }
 
+// ---------- Today's activity summary (staff floor view) ----------
+
+export interface TodayActivitySummary {
+  /** YYYY-MM-DD in SGT, just so the client can label the day. */
+  date: string;
+  /** Confirmed member + walk-in bookings whose start lies within today (SGT). */
+  totalBookings: number;
+  /** Count of tables with computed status "occupied" right now. */
+  occupiedNow: number;
+  /** Confirmed bookings that start within the next 2 hours. */
+  upcomingNext2h: number;
+}
+
+export async function getTodayActivity(
+  now: Date = new Date()
+): Promise<TodayActivitySummary> {
+  const date = todaySGT();
+  const dayStart = startOfDaySGT(date);
+  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+  const dayStartIso = dayStart.toISOString();
+  const dayEndIso = dayEnd.toISOString();
+  const nowIso = now.toISOString();
+  const horizonIso = new Date(now.getTime() + RESERVED_WINDOW_MS).toISOString();
+
+  if (!isSupabaseConfigured()) {
+    // Use the same synthetic mix the floor view shows so the numbers line up.
+    const synthetic = buildMockFloorState(now);
+    const allBookings = [
+      ...MOCK_BOOKINGS.filter((b) => b.status === "confirmed"),
+      ...synthetic.bookings,
+    ];
+    const totalBookings = allBookings.filter(
+      (b) => b.starts_at >= dayStartIso && b.starts_at < dayEndIso
+    ).length;
+    const occupiedNow = synthetic.bookings.filter((b) =>
+      isInRange(nowIso, b.starts_at, b.ends_at)
+    ).length;
+    const upcomingNext2h = allBookings.filter(
+      (b) => b.starts_at > nowIso && b.starts_at < horizonIso
+    ).length;
+    return { date, totalBookings, occupiedNow, upcomingNext2h };
+  }
+
+  const supabase = createClient();
+  const [todayRes, currentRes, upcomingRes] = await Promise.all([
+    supabase
+      .from("bookings")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "confirmed")
+      .gte("starts_at", dayStartIso)
+      .lt("starts_at", dayEndIso),
+    supabase
+      .from("bookings")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "confirmed")
+      .lte("starts_at", nowIso)
+      .gt("ends_at", nowIso),
+    supabase
+      .from("bookings")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "confirmed")
+      .gt("starts_at", nowIso)
+      .lt("starts_at", horizonIso),
+  ]);
+
+  return {
+    date,
+    totalBookings: todayRes.count ?? 0,
+    occupiedNow: currentRes.count ?? 0,
+    upcomingNext2h: upcomingRes.count ?? 0,
+  };
+}
+
 // ---------- Fetch a single table by id ----------
 
 export async function getTableById(tableId: string): Promise<Table | null> {
@@ -265,7 +340,7 @@ export async function getAvailableSlots(
   tableId: string,
   date: string
 ): Promise<TimeSlot[]> {
-  const dayStart = startOfDay(date);
+  const dayStart = startOfDaySGT(date);
   const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
 
   const { bookings, blocks } = await fetchDayOccupancy(
@@ -278,8 +353,7 @@ export async function getAvailableSlots(
   const nowMs = Date.now();
 
   for (let hour = VENUE_OPEN_HOUR; hour < VENUE_CLOSE_HOUR; hour++) {
-    const slotStart = new Date(dayStart);
-    slotStart.setHours(hour, 0, 0, 0);
+    const slotStart = dateAtHourSGT(date, hour);
     const slotEnd = new Date(slotStart.getTime() + 60 * 60 * 1000);
 
     const startIso = slotStart.toISOString();
@@ -416,27 +490,22 @@ function buildMockFloorState(now: Date): {
     },
   ];
 
-  const blocks: BlockedSlot[] = [
-    // Table 7 — blocked for maintenance right now
-    {
-      id: "mock-block-1",
-      table_id: "table-7",
-      starts_at: iso(-60),
-      ends_at: iso(180),
-      reason: "Maintenance",
-      notes: "Felt re-covering in progress",
-      created_by: "mock-staff-1",
-      created_at: fixed,
-    },
-  ];
+  const blocks: BlockedSlot[] = isMockTableUnblocked("table-7")
+    ? []
+    : [
+        // Table 7 — blocked for maintenance right now
+        {
+          id: "mock-block-1",
+          table_id: "table-7",
+          starts_at: iso(-60),
+          ends_at: iso(180),
+          reason: "Maintenance",
+          notes: "Felt re-covering in progress",
+          created_by: "mock-staff-1",
+          created_at: fixed,
+        },
+      ];
 
   return { bookings, blocks };
 }
 
-function startOfDay(date: string): Date {
-  const [y, m, d] = date.split("-").map(Number);
-  const dt = new Date();
-  dt.setFullYear(y!, (m ?? 1) - 1, d ?? 1);
-  dt.setHours(0, 0, 0, 0);
-  return dt;
-}
