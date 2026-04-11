@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { APP_NAME } from "@/lib/constants";
+import { LogoutButton } from "@/components/auth/LogoutButton";
+import { useAuth } from "@/hooks/useAuth";
 
 const staffLinks = [
   { href: "/floor", label: "Floorplan" },
@@ -18,6 +20,7 @@ const ownerLinks = [
 
 export function StaffSidebar() {
   const pathname = usePathname();
+  const { profile, role } = useAuth();
 
   const renderLink = (link: { href: string; label: string }) => {
     const active = pathname === link.href;
@@ -38,7 +41,7 @@ export function StaffSidebar() {
   };
 
   return (
-    <aside className="sticky top-0 hidden h-screen w-56 shrink-0 border-r border-white/10 bg-primary/60 p-4 md:block">
+    <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col border-r border-white/10 bg-primary/60 p-4 md:flex">
       <div className="mb-6 px-2">
         <h1 className="text-xl font-bold text-white">
           {APP_NAME}
@@ -56,6 +59,16 @@ export function StaffSidebar() {
         Owner
       </div>
       <ul className="space-y-1">{ownerLinks.map(renderLink)}</ul>
+
+      <div className="mt-auto border-t border-white/10 pt-4">
+        {profile && (
+          <div className="mb-3 px-3 text-xs text-white/60">
+            <div className="truncate text-white">{profile.full_name}</div>
+            <div className="truncate text-white/40">{role}</div>
+          </div>
+        )}
+        <LogoutButton variant="sidebar" />
+      </div>
     </aside>
   );
 }
