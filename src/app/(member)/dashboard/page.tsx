@@ -4,7 +4,10 @@ import { CreditsCard } from "@/components/member/CreditsCard";
 import { UpcomingBookings } from "@/components/member/UpcomingBookings";
 import { PendingInvites } from "@/components/member/PendingInvites";
 import { getCurrentAuthUserId, getMemberWithTier } from "@/lib/data/members";
-import { getUpcomingBookings } from "@/lib/data/bookings";
+import {
+  completeExpiredBookings,
+  getUpcomingBookings,
+} from "@/lib/data/bookings";
 import { getPendingInvites } from "@/lib/data/invites";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +18,10 @@ export default async function DashboardPage() {
     // RouteGuard usually handles this, but server-side fetch needs a fallback.
     redirect("/login");
   }
+
+  // Opportunistic sweep: flip any expired confirmed bookings to completed
+  // so the upcoming list below stays accurate without a cron job.
+  await completeExpiredBookings();
 
   const profile = await getMemberWithTier(authUserId);
   if (!profile) {

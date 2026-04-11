@@ -25,6 +25,8 @@ export interface CurrentStaff {
  */
 export async function getCurrentStaff(): Promise<CurrentStaff | null> {
   if (!isSupabaseConfigured()) {
+    // NOTE: cookies() is sync in Next 14. Will need `await cookies()` if
+    // upgrading to Next 15+.
     const authId = cookies().get(MOCK_SESSION_COOKIE)?.value;
     if (!authId) return null;
     const account = MOCK_ACCOUNTS.find((a) => a.user.id === authId);

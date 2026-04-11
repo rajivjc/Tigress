@@ -74,6 +74,23 @@ export async function handleInvoicePaid(
 
   const supabase = createAdminClient();
 
+  // Idempotency guard: Stripe may deliver the same event multiple times.
+  // We keyed past credit resets in the audit log with the invoice id, so
+  // if we've already processed this invoice for this member, skip it.
+  if (invoice.id) {
+    const { data: existing } = await supabase
+      .from("audit_log")
+      .select("id")
+      .eq("action", "credits.reset")
+      .eq("entity_id", member.id)
+      .filter("metadata->>invoice_id", "eq", invoice.id)
+      .limit(1);
+    if ((existing as { id: string }[] | null)?.length) {
+      // Already processed — skip to avoid double-reset.
+      return;
+    }
+  }
+
   // Look up the monthly credit allocation from the member's current tier.
   let creditsPerMonth = 0;
   if (member.membership_tier_id) {

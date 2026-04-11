@@ -55,10 +55,14 @@ export function StaffSidebar() {
       </div>
       <ul className="mb-6 space-y-1">{staffLinks.map(renderLink)}</ul>
 
-      <div className="mb-2 px-3 text-xs uppercase tracking-wider text-white/40">
-        Owner
-      </div>
-      <ul className="space-y-1">{ownerLinks.map(renderLink)}</ul>
+      {role === "owner" && (
+        <>
+          <div className="mb-2 px-3 text-xs uppercase tracking-wider text-white/40">
+            Owner
+          </div>
+          <ul className="space-y-1">{ownerLinks.map(renderLink)}</ul>
+        </>
+      )}
 
       <div className="mt-auto border-t border-white/10 pt-4">
         {profile && (
