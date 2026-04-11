@@ -1,10 +1,28 @@
-import Link from "next/link";
-import { APP_NAME } from "@/lib/constants";
+"use client";
 
-// Landing / redirect.
-// Once auth is wired up, this will redirect authenticated users to /dashboard
-// and unauthenticated users to /login.
+import { useEffect } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { APP_NAME } from "@/lib/constants";
+import { useAuth } from "@/hooks/useAuth";
+import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
+
+// Landing page. Authenticated users are redirected to their role-based home.
+// Unauthenticated visitors see the marketing splash with a Sign-in button.
 export default function LandingPage() {
+  const router = useRouter();
+  const { role, isLoading } = useAuth();
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (!role) return;
+    router.replace(role === "member" ? "/dashboard" : "/floor");
+  }, [isLoading, role, router]);
+
+  if (isLoading || role) {
+    return <LoadingSkeleton />;
+  }
+
   return (
     <main className="flex min-h-screen flex-col items-center justify-center px-6 py-12 text-center">
       <div className="mb-8">
@@ -30,10 +48,10 @@ export default function LandingPage() {
           Sign in
         </Link>
         <Link
-          href="/dashboard"
+          href="/register"
           className="rounded-lg border border-white/20 px-6 py-3 font-medium text-white transition-colors hover:bg-white/5"
         >
-          View demo
+          Sign up
         </Link>
       </div>
     </main>
