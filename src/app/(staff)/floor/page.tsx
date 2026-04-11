@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { StaffFloorView } from "@/components/floorplan/StaffFloorView";
+import { PageTransition } from "@/components/ui/PageTransition";
 import { getCurrentStaff } from "@/lib/data/staff";
 import {
   getTablesWithStatus,
@@ -25,10 +26,12 @@ export default async function FloorPage() {
   ]);
 
   return (
-    <StaffFloorView
-      initialTables={tables}
-      userRole={current.role}
-      todayActivity={activity}
-    />
+    <PageTransition>
+      <StaffFloorView
+        initialTables={tables}
+        userRole={current.role}
+        todayActivity={activity}
+      />
+    </PageTransition>
   );
 }

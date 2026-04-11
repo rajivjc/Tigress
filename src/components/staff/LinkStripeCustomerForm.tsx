@@ -52,12 +52,12 @@ export function LinkStripeCustomerForm({
           value={value}
           onChange={(e) => setValue(e.target.value)}
           placeholder="cus_..."
-          className="flex-1 rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-accent"
+          className="flex-1 rounded-lg border border-white/10 bg-surface-2 px-3 py-2.5 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
         />
         <button
           type="submit"
           disabled={pending}
-          className="rounded-md bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent/90 disabled:opacity-50"
+          className="rounded-md bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent/90 disabled:opacity-50 transition-all duration-200 active:scale-[0.98]"
         >
           {pending ? "Saving…" : "Save"}
         </button>

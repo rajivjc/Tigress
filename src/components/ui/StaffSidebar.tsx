@@ -2,39 +2,56 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import {
+  LayoutGrid,
+  Calendar,
+  UserPlus,
+  Users,
+  Settings,
+  DollarSign,
+  type LucideIcon,
+} from "lucide-react";
 import { APP_NAME } from "@/lib/constants";
 import { LogoutButton } from "@/components/auth/LogoutButton";
 import { useAuth } from "@/hooks/useAuth";
 
-const staffLinks = [
-  { href: "/floor", label: "Floorplan" },
-  { href: "/calendar", label: "Calendar" },
-  { href: "/walk-in", label: "Walk-in" },
-  { href: "/members", label: "Members" },
+type SidebarLink = { href: string; label: string; icon: LucideIcon };
+
+const staffLinks: SidebarLink[] = [
+  { href: "/floor", label: "Floorplan", icon: LayoutGrid },
+  { href: "/calendar", label: "Calendar", icon: Calendar },
+  { href: "/walk-in", label: "Walk-in", icon: UserPlus },
+  { href: "/members", label: "Members", icon: Users },
 ];
 
-const ownerLinks = [
-  { href: "/settings", label: "Settings" },
-  { href: "/rates", label: "Rates" },
+const ownerLinks: SidebarLink[] = [
+  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/rates", label: "Rates", icon: DollarSign },
 ];
 
 export function StaffSidebar() {
   const pathname = usePathname();
   const { profile, role } = useAuth();
 
-  const renderLink = (link: { href: string; label: string }) => {
+  const renderLink = (link: SidebarLink) => {
     const active = pathname === link.href;
+    const Icon = link.icon;
     return (
       <li key={link.href}>
         <Link
           href={link.href}
-          className={`block rounded-lg px-3 py-2 text-sm transition-colors ${
+          className={`flex items-center gap-3 rounded-lg border-l-2 px-3 py-2 text-sm transition-colors ${
             active
-              ? "bg-accent/20 text-accent"
-              : "text-white/70 hover:bg-white/5 hover:text-white"
+              ? "border-l-accent bg-surface-3 text-accent"
+              : "border-l-transparent text-white/70 hover:bg-surface-2 hover:text-white"
           }`}
         >
-          {link.label}
+          <Icon
+            size={18}
+            strokeWidth={1.5}
+            fill={active ? "currentColor" : "none"}
+          />
+          <span>{link.label}</span>
         </Link>
       </li>
     );
@@ -43,7 +60,7 @@ export function StaffSidebar() {
   return (
     <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col border-r border-white/10 bg-primary/60 p-4 md:flex">
       <div className="mb-6 px-2">
-        <h1 className="text-xl font-bold text-white">
+        <h1 className="text-xl font-extrabold text-white">
           {APP_NAME}
           <span className="text-accent">.</span>
         </h1>

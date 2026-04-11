@@ -39,7 +39,7 @@ export function PendingInvites({ invites: initial }: PendingInvitesProps) {
   };
 
   return (
-    <section className="rounded-2xl border border-white/10 bg-surface/60 p-5 shadow-xl backdrop-blur">
+    <section className="rounded-2xl border border-white/10 bg-surface-1 p-5 shadow-xl ">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold uppercase tracking-wider text-white/40">
           Pending invites
@@ -61,7 +61,7 @@ export function PendingInvites({ invites: initial }: PendingInvitesProps) {
           return (
             <li
               key={invite.id}
-              className="rounded-lg border border-white/5 bg-black/20 p-3"
+              className="rounded-lg border border-white/5 bg-surface-1/80 p-3"
             >
               <Link
                 href={booking ? `/bookings/${booking.id}` : "#"}
@@ -85,7 +85,7 @@ export function PendingInvites({ invites: initial }: PendingInvitesProps) {
                   type="button"
                   onClick={() => handleRespond(invite.id, "accepted")}
                   disabled={disabled}
-                  className="flex-1 rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-accent/90 disabled:opacity-50"
+                  className="flex-1 rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-white transition-all duration-200 hover:bg-accent/90 disabled:opacity-50 active:scale-[0.98]"
                 >
                   {disabled ? "…" : "Accept"}
                 </button>

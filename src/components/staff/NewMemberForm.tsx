@@ -116,7 +116,7 @@ export function NewMemberForm({ tiers }: NewMemberFormProps) {
 
       <form
         onSubmit={handleSubmit}
-        className="space-y-4 rounded-2xl border border-white/10 bg-surface/60 p-4"
+        className="space-y-4 rounded-2xl border border-white/10 bg-surface-1 p-4"
       >
         <Field label="Full name" htmlFor="full_name">
           <input
@@ -126,7 +126,7 @@ export function NewMemberForm({ tiers }: NewMemberFormProps) {
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
             placeholder="Jane Doe"
-            className="w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-accent"
+            className="w-full rounded-lg border border-white/10 bg-surface-3 px-3 py-2.5 text-sm text-white placeholder-white/30 outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
           />
         </Field>
 
@@ -138,7 +138,7 @@ export function NewMemberForm({ tiers }: NewMemberFormProps) {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="jane@example.com"
-            className="w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-accent"
+            className="w-full rounded-lg border border-white/10 bg-surface-3 px-3 py-2.5 text-sm text-white placeholder-white/30 outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
           />
         </Field>
 
@@ -149,7 +149,7 @@ export function NewMemberForm({ tiers }: NewMemberFormProps) {
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             placeholder="+65 9123 4567"
-            className="w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-accent"
+            className="w-full rounded-lg border border-white/10 bg-surface-3 px-3 py-2.5 text-sm text-white placeholder-white/30 outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
           />
         </Field>
 
@@ -162,7 +162,7 @@ export function NewMemberForm({ tiers }: NewMemberFormProps) {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="At least 8 characters"
-            className="w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-accent"
+            className="w-full rounded-lg border border-white/10 bg-surface-3 px-3 py-2.5 text-sm text-white placeholder-white/30 outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
           />
         </Field>
 
@@ -171,7 +171,7 @@ export function NewMemberForm({ tiers }: NewMemberFormProps) {
             id="tier"
             value={tierId}
             onChange={(e) => setTierId(e.target.value)}
-            className="w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-accent"
+            className="w-full rounded-lg border border-white/10 bg-surface-3 px-3 py-2.5 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
           >
             <option value={NO_TIER_VALUE}>No tier</option>
             {tiers.map((t) => (
@@ -193,7 +193,7 @@ export function NewMemberForm({ tiers }: NewMemberFormProps) {
               setCreditsTouched(true);
               setCredits(e.target.value);
             }}
-            className="w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-accent"
+            className="w-full rounded-lg border border-white/10 bg-surface-3 px-3 py-2.5 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
           />
           {selectedTier && (
             <p className="mt-1 text-[11px] text-white/40">
@@ -210,7 +210,7 @@ export function NewMemberForm({ tiers }: NewMemberFormProps) {
               setStatusTouched(true);
               setStatus(e.target.value as SubscriptionStatus);
             }}
-            className="w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-accent"
+            className="w-full rounded-lg border border-white/10 bg-surface-3 px-3 py-2.5 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
           >
             {STATUS_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -227,7 +227,7 @@ export function NewMemberForm({ tiers }: NewMemberFormProps) {
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Internal notes about this member…"
-            className="w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-accent"
+            className="w-full rounded-lg border border-white/10 bg-surface-3 px-3 py-2.5 text-sm text-white placeholder-white/30 outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
           />
         </Field>
 
@@ -244,7 +244,7 @@ export function NewMemberForm({ tiers }: NewMemberFormProps) {
           <button
             type="submit"
             disabled={pending}
-            className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent/90 disabled:opacity-50"
+            className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent/90 disabled:opacity-50 transition-all duration-200 active:scale-[0.98]"
           >
             {pending ? "Creating…" : "Create member"}
           </button>

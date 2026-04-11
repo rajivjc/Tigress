@@ -1,3 +1,5 @@
+import { CalendarDays } from "lucide-react";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { formatDateShort, formatTimeRange } from "@/lib/format";
 import type { BookingStatus } from "@/lib/types";
 import type { BookingWithRelations } from "@/lib/data/bookings";
@@ -26,11 +28,7 @@ export function BookingHistoryList({
   emptyMessage = "No bookings yet",
 }: BookingHistoryListProps) {
   if (bookings.length === 0) {
-    return (
-      <div className="rounded-lg border border-dashed border-white/10 bg-black/20 p-5 text-center text-sm text-white/60">
-        {emptyMessage}
-      </div>
-    );
+    return <EmptyState icon={CalendarDays} title={emptyMessage} />;
   }
 
   return (
@@ -38,7 +36,7 @@ export function BookingHistoryList({
       {bookings.map(({ booking, table }) => (
         <li
           key={booking.id}
-          className="rounded-lg border border-white/5 bg-black/20 p-3"
+          className="rounded-lg border border-white/5 bg-surface-1/80 p-3"
         >
           <a
             href={`/bookings/${booking.id}`}

@@ -29,7 +29,7 @@ export default async function StaffCalendarPage({
   const view: CalendarView = searchParams.view === "week" ? "week" : "day";
 
   const tabs = (
-    <div className="flex gap-1 rounded-lg border border-white/10 bg-black/20 p-1">
+    <div className="flex gap-1 rounded-lg border border-white/10 bg-surface-1/80 p-1">
       <Link
         href={`/calendar?date=${date}&view=day`}
         className={`flex-1 rounded-md px-3 py-1.5 text-center text-xs font-medium transition-colors ${

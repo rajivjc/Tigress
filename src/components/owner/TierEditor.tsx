@@ -31,7 +31,7 @@ export function TierEditor({ tiers }: TierEditorProps) {
       {tiers.map((tier) => (
         <div
           key={tier.id}
-          className="rounded-xl border border-white/10 bg-black/20 p-4"
+          className="rounded-xl border border-white/10 bg-surface-1/80 p-4"
         >
           {editingId === tier.id ? (
             <TierForm
@@ -49,7 +49,7 @@ export function TierEditor({ tiers }: TierEditorProps) {
       ))}
 
       {adding ? (
-        <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+        <div className="rounded-xl border border-white/10 bg-surface-1/80 p-4">
           <TierForm
             onCancel={() => setAdding(false)}
             onSaved={() => setAdding(false)}
@@ -113,7 +113,7 @@ function TierReadRow({
 
 function StatCell({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md border border-white/5 bg-black/30 p-2 text-center">
+    <div className="rounded-md border border-white/5 bg-surface-2 p-2 text-center">
       <div className="text-[10px] uppercase tracking-wider text-white/40">
         {label}
       </div>
@@ -191,7 +191,7 @@ function TierForm({ tier, onCancel, onSaved }: TierFormProps) {
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
-          className="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none"
+          className="w-full rounded-lg border border-white/10 bg-surface-2 px-3 py-2.5 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
         />
       </Field>
 
@@ -202,7 +202,7 @@ function TierForm({ tier, onCancel, onSaved }: TierFormProps) {
           min="0"
           value={priceDollars}
           onChange={(e) => setPriceDollars(e.target.value)}
-          className="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none"
+          className="w-full rounded-lg border border-white/10 bg-surface-2 px-3 py-2.5 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
         />
       </Field>
 
@@ -213,7 +213,7 @@ function TierForm({ tier, onCancel, onSaved }: TierFormProps) {
             min="0"
             value={credits}
             onChange={(e) => setCredits(e.target.value)}
-            className="w-full rounded-md border border-white/10 bg-black/30 px-2 py-2 text-sm text-white outline-none"
+            className="w-full rounded-lg border border-white/10 bg-surface-2 px-2 py-2.5 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
           />
         </Field>
         <Field label="Priority days">
@@ -222,7 +222,7 @@ function TierForm({ tier, onCancel, onSaved }: TierFormProps) {
             min="0"
             value={priorityDays}
             onChange={(e) => setPriorityDays(e.target.value)}
-            className="w-full rounded-md border border-white/10 bg-black/30 px-2 py-2 text-sm text-white outline-none"
+            className="w-full rounded-lg border border-white/10 bg-surface-2 px-2 py-2.5 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
           />
         </Field>
         <Field label="Guest passes">
@@ -231,7 +231,7 @@ function TierForm({ tier, onCancel, onSaved }: TierFormProps) {
             min="0"
             value={guestPasses}
             onChange={(e) => setGuestPasses(e.target.value)}
-            className="w-full rounded-md border border-white/10 bg-black/30 px-2 py-2 text-sm text-white outline-none"
+            className="w-full rounded-lg border border-white/10 bg-surface-2 px-2 py-2.5 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
           />
         </Field>
       </div>
@@ -242,7 +242,7 @@ function TierForm({ tier, onCancel, onSaved }: TierFormProps) {
           value={stripePriceId}
           onChange={(e) => setStripePriceId(e.target.value)}
           placeholder="price_xxx"
-          className="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 font-mono text-xs text-white outline-none"
+          className="w-full rounded-lg border border-white/10 bg-surface-2 px-3 py-2.5 font-mono text-xs text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
         />
       </Field>
 
@@ -264,7 +264,7 @@ function TierForm({ tier, onCancel, onSaved }: TierFormProps) {
         <button
           type="submit"
           disabled={pending}
-          className="flex-1 rounded-md bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent/90 disabled:opacity-50"
+          className="flex-1 rounded-md bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent/90 disabled:opacity-50 transition-all duration-200 active:scale-[0.98]"
         >
           {pending ? "Saving…" : "Save"}
         </button>

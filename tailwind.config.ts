@@ -8,13 +8,16 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        primary: "#1A1A2E",
-        accent: "#E94560",
         background: "#0F0F23",
-        surface: "#16213E",
+        primary: "#1A1A2E",
+        "surface-1": "#141428",
+        "surface-2": "#1A1A35",
+        "surface-3": "#222244",
+        accent: "#E94560",
+        "accent-soft": "#E94560",
       },
       fontFamily: {
-        sans: ["system-ui", "-apple-system", "Segoe UI", "sans-serif"],
+        sans: ['"Plus Jakarta Sans Variable"', "system-ui", "sans-serif"],
       },
     },
   },

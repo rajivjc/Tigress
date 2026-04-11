@@ -124,7 +124,7 @@ function ActivityStrip({ activity }: { activity: TodayActivity }) {
   return (
     <section
       aria-label="Today's activity"
-      className="grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-surface/60 p-4"
+      className="grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-surface-1 p-4"
     >
       {items.map((item) => (
         <div key={item.label} className="text-center">

@@ -81,7 +81,7 @@ export function BlockForm({ tables, initialTableId }: BlockFormProps) {
         <select
           value={tableId}
           onChange={(e) => setTableId(e.target.value)}
-          className="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none"
+          className="w-full rounded-lg border border-white/10 bg-surface-2 px-3 py-2.5 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
           required
         >
           {tables.map((t) => (
@@ -99,7 +99,7 @@ export function BlockForm({ tables, initialTableId }: BlockFormProps) {
           min={today}
           max={maxDate}
           onChange={(e) => setDate(e.target.value || today)}
-          className="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none"
+          className="w-full rounded-lg border border-white/10 bg-surface-2 px-3 py-2.5 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
           required
         />
       </Section>
@@ -109,7 +109,7 @@ export function BlockForm({ tables, initialTableId }: BlockFormProps) {
           <select
             value={startHour}
             onChange={(e) => setStartHour(Number(e.target.value))}
-            className="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none"
+            className="w-full rounded-lg border border-white/10 bg-surface-2 px-3 py-2.5 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
           >
             {HOURS.map((h) => (
               <option key={h} value={h}>
@@ -123,7 +123,7 @@ export function BlockForm({ tables, initialTableId }: BlockFormProps) {
           <select
             value={endHour}
             onChange={(e) => setEndHour(Number(e.target.value))}
-            className="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none"
+            className="w-full rounded-lg border border-white/10 bg-surface-2 px-3 py-2.5 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
           >
             {HOURS.filter((h) => h > startHour).concat(24).map((h) => (
               <option key={h} value={h}>
@@ -142,7 +142,7 @@ export function BlockForm({ tables, initialTableId }: BlockFormProps) {
           required
           maxLength={120}
           placeholder="Maintenance"
-          className="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none"
+          className="w-full rounded-lg border border-white/10 bg-surface-2 px-3 py-2.5 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
         />
       </Section>
 
@@ -152,7 +152,7 @@ export function BlockForm({ tables, initialTableId }: BlockFormProps) {
           onChange={(e) => setNotes(e.target.value)}
           rows={3}
           placeholder="Felt re-covering, new cushions, etc."
-          className="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none"
+          className="w-full rounded-lg border border-white/10 bg-surface-2 px-3 py-2.5 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
         />
       </Section>
 
@@ -165,7 +165,7 @@ export function BlockForm({ tables, initialTableId }: BlockFormProps) {
       <button
         type="submit"
         disabled={pending || !tableId || !reason.trim()}
-        className="w-full rounded-lg bg-accent px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-40"
+        className="w-full rounded-lg bg-accent px-4 py-3 text-sm font-semibold text-white transition-all duration-200 hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-40 active:scale-[0.98]"
       >
         {pending ? "Blocking…" : "Block table"}
       </button>

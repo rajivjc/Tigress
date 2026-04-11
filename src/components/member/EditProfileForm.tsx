@@ -56,7 +56,7 @@ export function EditProfileForm({ member }: EditProfileFormProps) {
           value={fullName}
           onChange={(e) => setFullName(e.target.value)}
           required
-          className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white focus:border-accent focus:outline-none"
+          className="w-full rounded-lg border border-white/10 bg-surface-2 px-3 py-2.5 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
         />
       </div>
 
@@ -72,7 +72,7 @@ export function EditProfileForm({ member }: EditProfileFormProps) {
           type="email"
           value={member.email}
           disabled
-          className="w-full cursor-not-allowed rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white/50"
+          className="w-full cursor-not-allowed rounded-lg border border-white/10 bg-surface-1/80 px-3 py-2 text-sm text-white/50"
         />
         <p className="mt-1 text-[11px] text-white/40">
           Email is tied to your login and cannot be changed here.
@@ -92,7 +92,7 @@ export function EditProfileForm({ member }: EditProfileFormProps) {
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
           placeholder="+65 9123 4567"
-          className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white focus:border-accent focus:outline-none"
+          className="w-full rounded-lg border border-white/10 bg-surface-2 px-3 py-2.5 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
         />
       </div>
 
@@ -109,7 +109,7 @@ export function EditProfileForm({ member }: EditProfileFormProps) {
           value={avatarUrl}
           onChange={(e) => setAvatarUrl(e.target.value)}
           placeholder="https://…"
-          className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white focus:border-accent focus:outline-none"
+          className="w-full rounded-lg border border-white/10 bg-surface-2 px-3 py-2.5 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
         />
       </div>
 
@@ -128,7 +128,7 @@ export function EditProfileForm({ member }: EditProfileFormProps) {
       <button
         type="submit"
         disabled={isPending}
-        className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent/90 disabled:opacity-50"
+        className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-accent/90 disabled:opacity-50 active:scale-[0.98]"
       >
         {isPending ? "Saving…" : "Save changes"}
       </button>

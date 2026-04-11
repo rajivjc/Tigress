@@ -16,7 +16,7 @@ export default async function BookPage() {
   if (!profile) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center p-4">
-        <div className="w-full max-w-md rounded-2xl border border-white/10 bg-surface/60 p-6 text-center">
+        <div className="w-full max-w-md rounded-2xl border border-white/10 bg-surface-1 p-6 text-center">
           <h1 className="text-lg font-semibold text-white">
             No member profile
           </h1>

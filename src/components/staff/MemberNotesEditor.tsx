@@ -43,7 +43,7 @@ export function MemberNotesEditor({
         onChange={(e) => setNotes(e.target.value)}
         rows={4}
         placeholder="Internal notes about this member…"
-        className="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none"
+        className="w-full rounded-lg border border-white/10 bg-surface-2 px-3 py-2.5 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
       />
       <div className="flex items-center justify-between gap-3">
         <button

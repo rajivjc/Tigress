@@ -18,7 +18,7 @@ export default async function ProfilePage() {
   if (!profile) {
     return (
       <div className="p-4">
-        <div className="rounded-2xl border border-white/10 bg-surface/60 p-6 text-center">
+        <div className="rounded-2xl border border-white/10 bg-surface-1 p-6 text-center">
           <h1 className="text-lg font-semibold text-white">
             No member profile
           </h1>
@@ -39,7 +39,7 @@ export default async function ProfilePage() {
   return (
     <div className="space-y-4 p-4">
       {/* Header */}
-      <section className="rounded-2xl border border-white/10 bg-surface/60 p-5 shadow-xl backdrop-blur">
+      <section className="rounded-2xl border border-white/10 bg-surface-1 p-5 shadow-xl ">
         <div className="flex items-start gap-4">
           <Avatar name={member.full_name} src={member.avatar_url} size="lg" />
           <div className="min-w-0 flex-1">
@@ -61,7 +61,7 @@ export default async function ProfilePage() {
       </section>
 
       {/* Edit */}
-      <section className="rounded-2xl border border-white/10 bg-surface/60 p-5 shadow-xl backdrop-blur">
+      <section className="rounded-2xl border border-white/10 bg-surface-1 p-5 shadow-xl ">
         <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-white/40">
           Edit profile
         </h2>
@@ -69,7 +69,7 @@ export default async function ProfilePage() {
       </section>
 
       {/* Membership details */}
-      <section className="rounded-2xl border border-white/10 bg-surface/60 p-5 shadow-xl backdrop-blur">
+      <section className="rounded-2xl border border-white/10 bg-surface-1 p-5 shadow-xl ">
         <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-white/40">
           Membership
         </h2>
@@ -89,7 +89,7 @@ export default async function ProfilePage() {
                 {(tier.perks as string[]).map((perk) => (
                   <li
                     key={perk}
-                    className="flex items-start gap-2 before:mt-[6px] before:inline-block before:h-1 before:w-1 before:shrink-0 before:rounded-full before:bg-accent"
+                    className="flex items-start gap-2 before:mt-[6px] before:inline-block before:h-1 before:w-1 before:shrink-0 before:rounded-full before:bg-accent transition-all duration-200 active:scale-[0.98]"
                   >
                     <span>{perk}</span>
                   </li>
@@ -97,14 +97,14 @@ export default async function ProfilePage() {
               </ul>
             )}
 
-            <div className="flex items-center justify-between rounded-lg border border-white/5 bg-black/20 p-3 text-xs">
+            <div className="flex items-center justify-between rounded-lg border border-white/5 bg-surface-1/80 p-3 text-xs">
               <span className="text-white/60">Credits remaining</span>
               <span className="font-semibold text-white">
                 {member.credits_remaining} / {tier.credits_per_month}
               </span>
             </div>
             {member.credits_reset_date && (
-              <div className="flex items-center justify-between rounded-lg border border-white/5 bg-black/20 p-3 text-xs">
+              <div className="flex items-center justify-between rounded-lg border border-white/5 bg-surface-1/80 p-3 text-xs">
                 <span className="text-white/60">Resets</span>
                 <span className="font-semibold text-white">
                   {formatMonthDay(member.credits_reset_date)}
@@ -121,7 +121,7 @@ export default async function ProfilePage() {
         <button
           type="button"
           disabled
-          className="mt-5 w-full rounded-lg border border-white/10 bg-black/20 px-4 py-2.5 text-sm text-white/50"
+          className="mt-5 w-full rounded-lg border border-white/10 bg-surface-1/80 px-4 py-2.5 text-sm text-white/50"
           title="Coming soon"
         >
           Manage billing (via Stripe)
@@ -129,7 +129,7 @@ export default async function ProfilePage() {
       </section>
 
       {/* History */}
-      <section className="rounded-2xl border border-white/10 bg-surface/60 p-5 shadow-xl backdrop-blur">
+      <section className="rounded-2xl border border-white/10 bg-surface-1 p-5 shadow-xl ">
         <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-white/40">
           Booking history
         </h2>

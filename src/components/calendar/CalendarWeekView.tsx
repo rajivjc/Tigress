@@ -54,7 +54,7 @@ export function CalendarWeekView({ week }: CalendarWeekViewProps) {
         </button>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-white/10 bg-surface/60 p-3">
+      <div className="overflow-x-auto rounded-2xl border border-white/10 bg-surface-1 p-3">
         <div
           className="grid min-w-[560px] gap-1"
           style={{
@@ -147,7 +147,7 @@ function intensityClass(level: number, hasBlock: boolean): string {
   if (hasBlock && level === 0) return "bg-amber-500/20";
   switch (level) {
     case 0:
-      return "bg-black/20";
+      return "bg-surface-1/80";
     case 1:
       return "bg-accent/10";
     case 2:

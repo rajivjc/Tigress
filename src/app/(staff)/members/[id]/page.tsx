@@ -50,7 +50,7 @@ export default async function StaffMemberDetailPage({
         ← All members
       </Link>
 
-      <header className="flex items-start gap-4 rounded-2xl border border-white/10 bg-surface/60 p-5">
+      <header className="flex items-start gap-4 rounded-2xl border border-white/10 bg-surface-1 p-5">
         <Avatar name={member.full_name} src={member.avatar_url} size="lg" />
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-xl font-bold text-white">
@@ -89,7 +89,7 @@ export default async function StaffMemberDetailPage({
         />
       )}
 
-      <section className="rounded-2xl border border-white/10 bg-surface/60 p-4">
+      <section className="rounded-2xl border border-white/10 bg-surface-1 p-4">
         <p className="mb-3 text-[11px] uppercase tracking-wider text-white/40">
           Upcoming bookings
         </p>
@@ -100,7 +100,7 @@ export default async function StaffMemberDetailPage({
             {upcomingBookings.map(({ booking, table }) => (
               <li
                 key={booking.id}
-                className="rounded-lg border border-white/10 bg-black/20 p-3 text-sm"
+                className="rounded-lg border border-white/10 bg-surface-1/80 p-3 text-sm"
               >
                 <p className="font-medium text-white">
                   Table {table?.table_number ?? "?"} ·{" "}
@@ -115,7 +115,7 @@ export default async function StaffMemberDetailPage({
         )}
       </section>
 
-      <section className="rounded-2xl border border-white/10 bg-surface/60 p-4">
+      <section className="rounded-2xl border border-white/10 bg-surface-1 p-4">
         <p className="mb-3 text-[11px] uppercase tracking-wider text-white/40">
           Recent history
         </p>
@@ -126,7 +126,7 @@ export default async function StaffMemberDetailPage({
             {pastBookings.map(({ booking, table }) => (
               <li
                 key={booking.id}
-                className="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 p-3 text-sm"
+                className="flex items-center justify-between rounded-lg border border-white/10 bg-surface-1/80 p-3 text-sm"
               >
                 <div>
                   <p className="font-medium text-white">
@@ -147,7 +147,7 @@ export default async function StaffMemberDetailPage({
       </section>
 
       {isOwner && (
-        <section className="rounded-2xl border border-white/10 bg-surface/60 p-4">
+        <section className="rounded-2xl border border-white/10 bg-surface-1 p-4">
           <LinkStripeCustomerForm
             memberId={member.id}
             initialCustomerId={member.stripe_customer_id}
@@ -155,7 +155,7 @@ export default async function StaffMemberDetailPage({
         </section>
       )}
 
-      <section className="rounded-2xl border border-white/10 bg-surface/60 p-4">
+      <section className="rounded-2xl border border-white/10 bg-surface-1 p-4">
         <p className="mb-3 text-[11px] uppercase tracking-wider text-white/40">
           Admin notes
         </p>
@@ -180,7 +180,7 @@ function Stat({
   value: string | number;
 }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-surface/60 p-4 text-center">
+    <div className="rounded-xl border border-white/10 bg-surface-1 p-4 text-center">
       <p className="text-xl font-bold text-white">{value}</p>
       <p className="mt-1 text-[10px] uppercase tracking-wider text-white/40">
         {label}

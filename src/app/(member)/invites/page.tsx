@@ -57,7 +57,7 @@ export default async function InvitesPage() {
       </header>
 
       {invites.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-white/10 bg-black/20 p-6 text-center text-sm text-white/60">
+        <div className="rounded-lg border border-dashed border-white/10 bg-surface-1/80 p-6 text-center text-sm text-white/60">
           No invites yet
         </div>
       ) : (

@@ -1,15 +1,20 @@
-import { APP_NAME } from "@/lib/constants";
-
 export function LoadingSkeleton() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center px-6">
-      <h1 className="animate-pulse text-4xl font-bold text-white">
-        {APP_NAME}
-        <span className="text-accent">.</span>
-      </h1>
-      <p className="mt-3 text-xs uppercase tracking-[0.3em] text-white/30">
-        Loading
-      </p>
+    <div className="min-h-screen p-4">
+      <div className="mx-auto max-w-md space-y-4 pt-16">
+        {/* Membership card skeleton */}
+        <div className="h-28 animate-shimmer rounded-2xl bg-surface-1" />
+        {/* Credits card skeleton */}
+        <div
+          className="h-48 animate-shimmer rounded-2xl bg-surface-1"
+          style={{ animationDelay: "0.15s" }}
+        />
+        {/* Bookings skeleton */}
+        <div
+          className="h-32 animate-shimmer rounded-2xl bg-surface-1"
+          style={{ animationDelay: "0.3s" }}
+        />
+      </div>
     </div>
   );
 }

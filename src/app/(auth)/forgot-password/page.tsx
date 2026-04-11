@@ -48,14 +48,14 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-surface/60 p-6 shadow-xl backdrop-blur">
+    <div className="rounded-2xl border border-white/10 bg-surface-1 p-6 shadow-xl ">
       <h2 className="mb-1 text-xl font-semibold text-white">Reset password</h2>
       <p className="mb-6 text-sm text-white/50">
         We&apos;ll send a reset link to your email
       </p>
 
       {submitted ? (
-        <div className="rounded-lg border border-white/10 bg-black/20 p-4 text-sm text-white/70">
+        <div className="rounded-lg border border-white/10 bg-surface-1/80 p-4 text-sm text-white/70">
           If an account exists for <span className="text-white">{email}</span>,
           a reset link has been sent.
         </div>
@@ -75,7 +75,7 @@ export default function ForgotPasswordPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
-              className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-accent"
+              className="w-full rounded-lg border border-white/10 bg-surface-2 px-3 py-2.5 text-sm text-white placeholder-white/30 outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
             />
           </div>
 
@@ -88,7 +88,7 @@ export default function ForgotPasswordPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-60 transition-all duration-200 active:scale-[0.98]"
           >
             {loading ? "Sending..." : "Send reset link"}
           </button>

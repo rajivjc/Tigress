@@ -36,7 +36,7 @@ export function RateCardEditor({ rates }: RateCardEditorProps) {
   return (
     <div className="space-y-3">
       {rates.length === 0 && (
-        <p className="rounded-xl border border-dashed border-white/10 bg-black/20 p-4 text-center text-xs text-white/50">
+        <p className="rounded-xl border border-dashed border-white/10 bg-surface-1/80 p-4 text-center text-xs text-white/50">
           No rate card entries yet.
         </p>
       )}
@@ -44,7 +44,7 @@ export function RateCardEditor({ rates }: RateCardEditorProps) {
       {rates.map((rate) => (
         <div
           key={rate.id}
-          className="rounded-xl border border-white/10 bg-black/20 p-4"
+          className="rounded-xl border border-white/10 bg-surface-1/80 p-4"
         >
           {editingId === rate.id ? (
             <RateForm
@@ -62,7 +62,7 @@ export function RateCardEditor({ rates }: RateCardEditorProps) {
       ))}
 
       {adding ? (
-        <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+        <div className="rounded-xl border border-white/10 bg-surface-1/80 p-4">
           <RateForm
             onCancel={() => setAdding(false)}
             onSaved={() => setAdding(false)}
@@ -247,7 +247,7 @@ function RateForm({ rate, onCancel, onSaved }: RateFormProps) {
           value={label}
           onChange={(e) => setLabel(e.target.value)}
           required
-          className="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none"
+          className="w-full rounded-lg border border-white/10 bg-surface-2 px-3 py-2.5 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
         />
       </Field>
 
@@ -256,7 +256,7 @@ function RateForm({ rate, onCancel, onSaved }: RateFormProps) {
           <select
             value={rateType}
             onChange={(e) => setRateType(e.target.value as RateType)}
-            className="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none"
+            className="w-full rounded-lg border border-white/10 bg-surface-2 px-3 py-2.5 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
           >
             <option value="hourly">Hourly</option>
             <option value="per_person">Per person</option>
@@ -273,7 +273,7 @@ function RateForm({ rate, onCancel, onSaved }: RateFormProps) {
           value={amountDollars}
           onChange={(e) => setAmountDollars(e.target.value)}
           required
-          className="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none"
+          className="w-full rounded-lg border border-white/10 bg-surface-2 px-3 py-2.5 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
         />
       </Field>
 
@@ -282,7 +282,7 @@ function RateForm({ rate, onCancel, onSaved }: RateFormProps) {
           type="text"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          className="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none"
+          className="w-full rounded-lg border border-white/10 bg-surface-2 px-3 py-2.5 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
         />
       </Field>
 
@@ -304,7 +304,7 @@ function RateForm({ rate, onCancel, onSaved }: RateFormProps) {
         <button
           type="submit"
           disabled={pending}
-          className="flex-1 rounded-md bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent/90 disabled:opacity-50"
+          className="flex-1 rounded-md bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent/90 disabled:opacity-50 transition-all duration-200 active:scale-[0.98]"
         >
           {pending ? "Saving…" : "Save"}
         </button>

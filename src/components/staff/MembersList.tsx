@@ -10,7 +10,9 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { Users } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { StatusDot } from "@/components/ui/StatusDot";
 import type { MemberListItem } from "@/lib/data/members";
 
@@ -45,7 +47,7 @@ export function MembersList({
         {canCreateMembers && (
           <Link
             href="/members/new"
-            className="rounded-md bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent/90"
+            className="rounded-md bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent/90 transition-all duration-200 active:scale-[0.98]"
           >
             + Add member
           </Link>
@@ -57,13 +59,11 @@ export function MembersList({
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         placeholder="Search by name or email…"
-        className="w-full rounded-lg border border-white/10 bg-surface/60 px-4 py-3 text-sm text-white outline-none placeholder:text-white/30"
+        className="w-full rounded-lg border border-white/10 bg-surface-1 px-4 py-3 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-white/30"
       />
 
       {filtered.length === 0 && (
-        <p className="rounded-lg border border-white/10 bg-surface/40 p-4 text-center text-sm text-white/50">
-          No members found.
-        </p>
+        <EmptyState icon={Users} title="No members found" />
       )}
 
       <ul className="space-y-2">
@@ -71,7 +71,7 @@ export function MembersList({
           <li key={member.id}>
             <Link
               href={`/members/${member.id}`}
-              className="flex items-center gap-3 rounded-xl border border-white/10 bg-surface/60 p-3 transition-colors hover:bg-white/5"
+              className="flex items-center gap-3 rounded-xl border border-white/10 bg-surface-1 p-3 transition-colors hover:bg-white/5"
             >
               <Avatar name={member.full_name} src={member.avatar_url} />
               <div className="min-w-0 flex-1">
