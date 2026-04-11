@@ -15,6 +15,7 @@ import {
   MOCK_INVITED_BOOKINGS,
   MOCK_TABLES,
   MOCK_TIERS,
+  MOCK_WALK_IN_GUESTS,
   allMockBookings,
   findMockMemberById,
   findMockTableById,
@@ -509,6 +510,153 @@ async function createBookingMock(
   member.credits_remaining -= input.credits_to_use;
 
   return { success: true, booking_id: id };
+}
+
+// =============================================================================
+// Walk-in creation
+// =============================================================================
+
+export interface CreateWalkInInput {
+  table_id: string;
+  starts_at: string;
+  ends_at: string;
+  guest_name: string;
+  guest_phone?: string | null;
+  guest_count: number;
+  comments?: string | null;
+  deposit_required: boolean;
+  deposit_paid: boolean;
+  /** Staff (or auth user) id who created the walk-in row. */
+  created_by: string;
+}
+
+export interface CreateWalkInResult {
+  success: boolean;
+  booking_id?: string;
+  error?: string;
+}
+
+function validateWalkInInput(input: CreateWalkInInput): string | null {
+  const startMs = Date.parse(input.starts_at);
+  const endMs = Date.parse(input.ends_at);
+  if (Number.isNaN(startMs) || Number.isNaN(endMs)) {
+    return "Invalid start or end time";
+  }
+  if (endMs <= startMs) {
+    return "End time must be after start time";
+  }
+  if (startMs <= Date.now() - 60 * 1000) {
+    // Allow a small slack for "right now" walk-ins.
+    return "Start time must be in the future";
+  }
+  const durationMinutes = (endMs - startMs) / 60000;
+  if (durationMinutes < MIN_SESSION_MINUTES) {
+    return "Walk-in must be at least 1 hour";
+  }
+  if (durationMinutes > MAX_SESSION_HOURS * 60) {
+    return `Walk-in cannot exceed ${MAX_SESSION_HOURS} hours`;
+  }
+  if (!input.guest_name || input.guest_name.trim().length === 0) {
+    return "Guest name is required";
+  }
+  if (input.guest_count < 1) {
+    return "Guest count must be at least 1";
+  }
+  if (input.deposit_paid && !input.deposit_required) {
+    return "Cannot mark deposit paid when deposit is not required";
+  }
+  return null;
+}
+
+export async function createWalkIn(
+  input: CreateWalkInInput
+): Promise<CreateWalkInResult> {
+  const error = validateWalkInInput(input);
+  if (error) return { success: false, error };
+
+  const availability = await checkSlotAvailability(
+    input.table_id,
+    input.starts_at,
+    input.ends_at
+  );
+  if (!availability.available) {
+    return {
+      success: false,
+      error: availability.reason ?? "This slot is no longer available",
+    };
+  }
+
+  if (!isSupabaseConfigured()) {
+    const table = MOCK_TABLES.find((t) => t.id === input.table_id);
+    if (!table) return { success: false, error: "Table not found" };
+
+    const id = `mock-walkin-${Date.now()}`;
+    const nowIso = new Date().toISOString();
+    const booking: Booking = {
+      id,
+      table_id: input.table_id,
+      member_id: null,
+      starts_at: input.starts_at,
+      ends_at: input.ends_at,
+      status: "confirmed",
+      credits_used: 0,
+      booking_type: "walk_in",
+      created_by: input.created_by,
+      notes: null,
+      created_at: nowIso,
+      updated_at: nowIso,
+    };
+    MOCK_BOOKINGS.push(booking);
+    MOCK_WALK_IN_GUESTS.push({
+      id: `mock-guest-${Date.now()}`,
+      booking_id: id,
+      guest_name: input.guest_name.trim(),
+      guest_phone: input.guest_phone ?? null,
+      guest_count: input.guest_count,
+      deposit_required: input.deposit_required,
+      deposit_paid: input.deposit_paid,
+      comments: input.comments ?? null,
+      created_at: nowIso,
+    });
+    return { success: true, booking_id: id };
+  }
+
+  const supabase = createClient();
+  const { data: inserted, error: insertErr } = await supabase
+    .from("bookings")
+    .insert({
+      table_id: input.table_id,
+      member_id: null,
+      starts_at: input.starts_at,
+      ends_at: input.ends_at,
+      status: "confirmed" as BookingStatus,
+      credits_used: 0,
+      booking_type: "walk_in",
+      created_by: input.created_by,
+    })
+    .select("id")
+    .single();
+
+  if (insertErr) return { success: false, error: insertErr.message };
+  const bookingId = (inserted as { id: string }).id;
+
+  const { error: guestErr } = await supabase.from("walk_in_guests").insert({
+    booking_id: bookingId,
+    guest_name: input.guest_name.trim(),
+    guest_phone: input.guest_phone ?? null,
+    guest_count: input.guest_count,
+    deposit_required: input.deposit_required,
+    deposit_paid: input.deposit_paid,
+    comments: input.comments ?? null,
+  });
+
+  if (guestErr) {
+    // Roll back the booking row so the table doesn't end up double-booked.
+    await supabase.from("bookings").delete().eq("id", bookingId);
+    return { success: false, error: guestErr.message };
+  }
+
+  return { success: true, booking_id: bookingId };
 }
 
 async function createBookingReal(

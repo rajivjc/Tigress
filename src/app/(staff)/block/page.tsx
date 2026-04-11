@@ -1,18 +1,22 @@
 import { redirect } from "next/navigation";
-import { WalkInForm } from "@/components/staff/WalkInForm";
+import { BlockForm } from "@/components/staff/BlockForm";
+import { AccessDenied } from "@/components/ui/AccessDenied";
 import { getCurrentStaff } from "@/lib/data/staff";
 import { getTablesWithStatus } from "@/lib/data/tables";
 
 export const dynamic = "force-dynamic";
 
-interface WalkInPageProps {
+interface BlockPageProps {
   searchParams: { table?: string };
 }
 
-export default async function WalkInPage({ searchParams }: WalkInPageProps) {
+export default async function BlockSlotPage({ searchParams }: BlockPageProps) {
   const current = await getCurrentStaff();
   if (!current) {
     redirect("/login");
+  }
+  if (current.role !== "manager" && current.role !== "owner") {
+    return <AccessDenied />;
   }
 
   const tables = (await getTablesWithStatus()).map((t) => ({
@@ -20,5 +24,5 @@ export default async function WalkInPage({ searchParams }: WalkInPageProps) {
     table_number: t.table_number,
   }));
 
-  return <WalkInForm tables={tables} initialTableId={searchParams.table} />;
+  return <BlockForm tables={tables} initialTableId={searchParams.table} />;
 }

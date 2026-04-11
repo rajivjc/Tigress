@@ -9,6 +9,7 @@
 // =============================================================================
 
 import { useEffect } from "react";
+import Link from "next/link";
 import { formatTime, formatTimeRange } from "@/lib/format";
 import type { TableWithStatus } from "@/lib/data/tables";
 import type { UserRole } from "@/lib/types";
@@ -19,6 +20,10 @@ export interface TableDetailPanelProps {
   onClose: () => void;
   onBook?: (tableId: string) => void;
   onUnblock?: (tableId: string) => void;
+}
+
+function isManagerRole(role: UserRole): boolean {
+  return role === "manager" || role === "owner";
 }
 
 function isStaffRole(role: UserRole): boolean {
@@ -57,7 +62,12 @@ export function TableDetailPanel({
   if (!table) return null;
 
   const staff = isStaffRole(userRole);
+  const manager = isManagerRole(userRole);
   const canBook = table.computed_status === "available";
+  const isOccupied = table.computed_status === "occupied";
+  const isReserved = table.computed_status === "reserved";
+  const isAvailable = table.computed_status === "available";
+  const isBlocked = table.computed_status === "blocked";
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
@@ -114,33 +124,78 @@ export function TableDetailPanel({
           )}
         </div>
 
-        <footer className="mt-5 flex gap-2">
-          {canBook && onBook && (
-            <button
-              type="button"
-              onClick={() => onBook(table.id)}
-              className="flex-1 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent/90"
+        <footer className="mt-5 space-y-2">
+          <div className="flex gap-2">
+            {canBook && onBook && (
+              <button
+                type="button"
+                onClick={() => onBook(table.id)}
+                className="flex-1 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent/90"
+              >
+                Book this table
+              </button>
+            )}
+
+            {/* Staff: walk-in shortcut for free tables */}
+            {staff && isAvailable && (
+              <Link
+                href={`/walk-in?table=${encodeURIComponent(table.id)}`}
+                className="flex-1 rounded-lg border border-white/20 px-4 py-2.5 text-center text-sm font-medium text-white/80 hover:bg-white/5"
+              >
+                Add walk-in
+              </Link>
+            )}
+
+            {/* Staff: open the booking detail for an occupied table */}
+            {staff && isOccupied && table.current_booking && (
+              <Link
+                href={`/bookings/${table.current_booking.id}`}
+                className="flex-1 rounded-lg border border-white/20 px-4 py-2.5 text-center text-sm font-medium text-white/80 hover:bg-white/5"
+              >
+                View booking
+              </Link>
+            )}
+
+            {/* Staff: open the booking detail for a reserved table */}
+            {staff && isReserved && table.next_booking && (
+              <Link
+                href={`/bookings/${table.next_booking.id}`}
+                className="flex-1 rounded-lg border border-white/20 px-4 py-2.5 text-center text-sm font-medium text-white/80 hover:bg-white/5"
+              >
+                View booking
+              </Link>
+            )}
+
+            {/* Manager/owner: unblock */}
+            {isBlocked && manager && onUnblock && (
+              <button
+                type="button"
+                onClick={() => onUnblock(table.id)}
+                className="flex-1 rounded-lg border border-white/20 px-4 py-2.5 text-sm font-medium text-white/80 hover:bg-white/5"
+              >
+                Unblock
+              </button>
+            )}
+
+            {!canBook && !isBlocked && !staff && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 rounded-lg border border-white/20 px-4 py-2.5 text-sm font-medium text-white/80 hover:bg-white/5"
+              >
+                Got it
+              </button>
+            )}
+          </div>
+
+          {/* Manager/owner: block link, available on any non-blocked table */}
+          {manager && !isBlocked && (
+            <Link
+              href={`/block?table=${encodeURIComponent(table.id)}`}
+              className="block rounded-lg border border-white/10 px-4 py-2 text-center text-xs font-medium text-white/60 hover:bg-white/5"
             >
-              Book this table
-            </button>
-          )}
-          {table.computed_status === "blocked" && staff && onUnblock && (
-            <button
-              type="button"
-              onClick={() => onUnblock(table.id)}
-              className="flex-1 rounded-lg border border-white/20 px-4 py-2.5 text-sm font-medium text-white/80 hover:bg-white/5"
-            >
-              Unblock
-            </button>
-          )}
-          {!canBook && table.computed_status !== "blocked" && (
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 rounded-lg border border-white/20 px-4 py-2.5 text-sm font-medium text-white/80 hover:bg-white/5"
-            >
-              Got it
-            </button>
+              Block this table
+            </Link>
           )}
         </footer>
       </div>
