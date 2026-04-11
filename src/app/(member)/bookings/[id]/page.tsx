@@ -71,7 +71,7 @@ export default async function BookingDetailPage({
       </div>
 
       {/* Main info */}
-      <section className="rounded-2xl border border-white/10 bg-surface/60 p-5 shadow-xl backdrop-blur">
+      <section className="rounded-2xl border border-white/10 bg-surface-1 p-5 shadow-xl ">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-xl font-semibold text-white">
@@ -92,13 +92,13 @@ export default async function BookingDetailPage({
         </div>
 
         <dl className="mt-4 grid grid-cols-2 gap-3 text-xs">
-          <div className="rounded-lg border border-white/5 bg-black/20 p-3">
+          <div className="rounded-lg border border-white/5 bg-surface-1/80 p-3">
             <dt className="text-white/40">Credits used</dt>
             <dd className="mt-1 font-medium text-white">
               {booking.credits_used}
             </dd>
           </div>
-          <div className="rounded-lg border border-white/5 bg-black/20 p-3">
+          <div className="rounded-lg border border-white/5 bg-surface-1/80 p-3">
             <dt className="text-white/40">Type</dt>
             <dd className="mt-1 font-medium capitalize text-white">
               {booking.booking_type.replace("_", " ")}
@@ -107,7 +107,7 @@ export default async function BookingDetailPage({
         </dl>
 
         {booking.notes && (
-          <div className="mt-4 rounded-lg border border-white/5 bg-black/20 p-3 text-xs text-white/70">
+          <div className="mt-4 rounded-lg border border-white/5 bg-surface-1/80 p-3 text-xs text-white/70">
             <div className="mb-1 uppercase tracking-wider text-white/40">
               Notes
             </div>
@@ -123,7 +123,7 @@ export default async function BookingDetailPage({
       </section>
 
       {/* Invited members */}
-      <section className="rounded-2xl border border-white/10 bg-surface/60 p-5 shadow-xl backdrop-blur">
+      <section className="rounded-2xl border border-white/10 bg-surface-1 p-5 shadow-xl ">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-white/40">
             Invited members
@@ -148,7 +148,7 @@ export default async function BookingDetailPage({
             {invites.map((invite) => (
               <li
                 key={invite.id}
-                className="flex items-center gap-3 rounded-lg border border-white/5 bg-black/20 p-3"
+                className="flex items-center gap-3 rounded-lg border border-white/5 bg-surface-1/80 p-3"
               >
                 <Avatar name={invite.invitee.full_name} size="sm" />
                 <div className="min-w-0 flex-1">
@@ -176,7 +176,7 @@ export default async function BookingDetailPage({
       )}
 
       {!canManage && !isUpcoming && (
-        <p className="rounded-lg border border-dashed border-white/10 bg-black/20 p-3 text-center text-xs text-white/50">
+        <p className="rounded-lg border border-dashed border-white/10 bg-surface-1/80 p-3 text-center text-xs text-white/50">
           Past booking — read-only
         </p>
       )}

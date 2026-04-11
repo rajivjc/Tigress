@@ -32,7 +32,7 @@ export function InviteMemberButton({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded-md border border-accent/40 bg-accent/10 px-3 py-1 text-[11px] font-semibold text-accent hover:bg-accent/20"
+        className="rounded-md border border-accent/40 bg-accent/10 px-3 py-1 text-[11px] font-semibold text-accent hover:bg-accent/20 transition-all duration-200 active:scale-[0.98]"
       >
         Invite a member
       </button>

@@ -277,7 +277,7 @@ function DatePicker({
   onChange: (d: string) => void;
 }) {
   return (
-    <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-surface/60 p-3">
+    <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-surface-1 p-3">
       <label className="flex-1">
         <span className="block text-[11px] uppercase tracking-wider text-white/40">
           Date
@@ -291,7 +291,7 @@ function DatePicker({
           className="mt-1 w-full bg-transparent text-sm font-medium text-white outline-none"
         />
       </label>
-      <div className="rounded-md bg-black/30 px-2 py-1 text-[10px] uppercase tracking-wider text-white/50">
+      <div className="rounded-md bg-surface-2 px-2 py-1 text-[10px] uppercase tracking-wider text-white/50">
         {formatDateShort(`${value}T12:00:00.000Z`)}
       </div>
     </div>
@@ -334,7 +334,7 @@ function PickTimeStep({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-white/10 bg-surface/60 p-4">
+      <div className="rounded-xl border border-white/10 bg-surface-1 p-4">
         <p className="text-[11px] uppercase tracking-wider text-white/40">
           Selected table
         </p>
@@ -346,7 +346,7 @@ function PickTimeStep({
         </p>
       </div>
 
-      <div className="rounded-xl border border-white/10 bg-surface/60 p-4">
+      <div className="rounded-xl border border-white/10 bg-surface-1 p-4">
         <p className="text-[11px] uppercase tracking-wider text-white/40">
           Duration
         </p>
@@ -391,7 +391,7 @@ function PickTimeStep({
         )}
       </div>
 
-      <div className="rounded-xl border border-white/10 bg-surface/60 p-4">
+      <div className="rounded-xl border border-white/10 bg-surface-1 p-4">
         <p className="text-[11px] uppercase tracking-wider text-white/40">
           Available start times
         </p>
@@ -420,7 +420,7 @@ function PickTimeStep({
                     isSelected
                       ? "border-accent bg-accent/20 text-white"
                       : disabled
-                      ? "cursor-not-allowed border-white/5 bg-black/30 text-white/30 line-through"
+                      ? "cursor-not-allowed border-white/5 bg-surface-2 text-white/30 line-through"
                       : "border-white/10 text-white/80 hover:bg-white/5"
                   }`}
                   title={
@@ -448,7 +448,7 @@ function PickTimeStep({
         type="button"
         onClick={onContinue}
         disabled={!canContinue}
-        className="w-full rounded-lg bg-accent px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-40"
+        className="w-full rounded-lg bg-accent px-4 py-3 text-sm font-semibold text-white transition-all duration-200 hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-40 active:scale-[0.98]"
       >
         Continue
       </button>
@@ -481,7 +481,7 @@ function ConfirmStep({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-white/10 bg-surface/60 p-5">
+      <div className="rounded-2xl border border-white/10 bg-surface-1 p-5">
         <p className="text-xs uppercase tracking-wider text-white/40">
           Booking summary
         </p>
@@ -504,7 +504,7 @@ function ConfirmStep({
         </dl>
       </div>
 
-      <div className="rounded-2xl border border-white/10 bg-surface/60 p-5">
+      <div className="rounded-2xl border border-white/10 bg-surface-1 p-5">
         <p className="text-xs uppercase tracking-wider text-white/40">
           Invite a member (optional)
         </p>
@@ -532,7 +532,7 @@ function ConfirmStep({
           type="button"
           onClick={onConfirm}
           disabled={submitting}
-          className="flex-1 rounded-lg bg-accent px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-accent/90 disabled:opacity-50"
+          className="flex-1 rounded-lg bg-accent px-4 py-3 text-sm font-semibold text-white transition-all duration-200 hover:bg-accent/90 disabled:opacity-50 active:scale-[0.98]"
         >
           {submitting ? "Confirming…" : "Confirm booking"}
         </button>

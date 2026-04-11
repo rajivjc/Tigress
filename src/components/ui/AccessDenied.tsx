@@ -24,7 +24,7 @@ export function AccessDenied() {
 
   return (
     <div className="flex min-h-screen items-center justify-center px-6">
-      <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-surface/60 p-6 text-center shadow-xl backdrop-blur">
+      <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-surface-1 p-6 text-center shadow-xl ">
         <div className="mb-3 inline-block rounded-full bg-accent/10 px-3 py-1 text-xs font-medium uppercase tracking-wider text-accent">
           403
         </div>
@@ -38,7 +38,7 @@ export function AccessDenied() {
           <button
             type="button"
             onClick={handleGoHome}
-            className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
+            className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent/90 transition-all duration-200 active:scale-[0.98]"
           >
             Go to my home
           </button>

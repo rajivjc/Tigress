@@ -3,6 +3,7 @@ import { MembershipCard } from "@/components/member/MembershipCard";
 import { CreditsCard } from "@/components/member/CreditsCard";
 import { UpcomingBookings } from "@/components/member/UpcomingBookings";
 import { PendingInvites } from "@/components/member/PendingInvites";
+import { PageTransition } from "@/components/ui/PageTransition";
 import { getCurrentAuthUserId, getMemberWithTier } from "@/lib/data/members";
 import {
   completeExpiredBookings,
@@ -27,7 +28,7 @@ export default async function DashboardPage() {
   if (!profile) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center p-4">
-        <div className="w-full max-w-md rounded-2xl border border-white/10 bg-surface/60 p-6 text-center">
+        <div className="w-full max-w-md rounded-2xl border border-white/10 bg-surface-1 p-6 text-center">
           <h1 className="text-lg font-semibold text-white">
             No member profile
           </h1>
@@ -45,11 +46,13 @@ export default async function DashboardPage() {
   ]);
 
   return (
-    <div className="space-y-4 p-4">
-      <MembershipCard member={profile.member} tier={profile.tier} />
-      <CreditsCard member={profile.member} tier={profile.tier} />
-      <UpcomingBookings bookings={upcoming} />
-      <PendingInvites invites={pendingInvites} />
-    </div>
+    <PageTransition>
+      <div className="space-y-4 p-4">
+        <MembershipCard member={profile.member} tier={profile.tier} />
+        <CreditsCard member={profile.member} tier={profile.tier} />
+        <UpcomingBookings bookings={upcoming} />
+        <PendingInvites invites={pendingInvites} />
+      </div>
+    </PageTransition>
   );
 }

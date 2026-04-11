@@ -43,7 +43,7 @@ export default function LandingPage() {
       <div className="flex flex-col gap-3 sm:flex-row">
         <Link
           href="/login"
-          className="rounded-lg bg-accent px-6 py-3 font-medium text-white transition-opacity hover:opacity-90"
+          className="rounded-lg bg-accent px-6 py-3 font-medium text-white hover:bg-accent/90 transition-all duration-200 active:scale-[0.98]"
         >
           Sign in
         </Link>

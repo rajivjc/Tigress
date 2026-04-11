@@ -35,7 +35,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-surface/60 p-6 shadow-xl backdrop-blur">
+    <div className="rounded-2xl border border-white/10 bg-surface-1 p-6 shadow-xl ">
       <h2 className="mb-1 text-xl font-semibold text-white">Sign in</h2>
       <p className="mb-6 text-sm text-white/50">Access your membership</p>
 
@@ -54,7 +54,7 @@ export default function LoginPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
-            className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-accent"
+            className="w-full rounded-lg border border-white/10 bg-surface-2 px-3 py-2.5 text-sm text-white placeholder-white/30 outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
           />
         </div>
         <div>
@@ -71,7 +71,7 @@ export default function LoginPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
-            className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-accent"
+            className="w-full rounded-lg border border-white/10 bg-surface-2 px-3 py-2.5 text-sm text-white placeholder-white/30 outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
           />
         </div>
 
@@ -84,7 +84,7 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+          className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-60 transition-all duration-200 active:scale-[0.98]"
         >
           {loading ? "Signing in..." : "Sign in"}
         </button>
@@ -103,7 +103,7 @@ export default function LoginPage() {
       </div>
 
       {isMock && (
-        <div className="mt-6 rounded-lg border border-dashed border-white/10 bg-black/20 p-3 text-xs text-white/60">
+        <div className="mt-6 rounded-lg border border-dashed border-white/10 bg-surface-1/80 p-3 text-xs text-white/60">
           <p className="mb-1 font-medium text-white/80">Mock mode</p>
           <p>
             Supabase isn&apos;t configured. Try one of:

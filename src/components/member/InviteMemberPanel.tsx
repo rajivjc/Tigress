@@ -115,7 +115,7 @@ export function InviteMemberPanel({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 md:items-center">
-      <div className="max-h-[90vh] w-full max-w-md overflow-hidden rounded-t-2xl border border-white/10 bg-surface shadow-2xl md:rounded-2xl">
+      <div className="max-h-[90vh] w-full max-w-md overflow-hidden rounded-t-2xl border border-white/10 bg-surface-2 shadow-2xl md:rounded-2xl">
         <header className="flex items-center justify-between border-b border-white/10 p-4">
           <div>
             <p className="text-[11px] uppercase tracking-wider text-white/40">
@@ -146,7 +146,7 @@ export function InviteMemberPanel({
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Name or email"
               autoFocus
-              className="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-accent"
+              className="w-full rounded-lg border border-white/10 bg-surface-2 px-3 py-2.5 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
             />
           </label>
 
@@ -179,7 +179,7 @@ export function InviteMemberPanel({
                 {existingInvites.map((inv) => (
                   <li
                     key={inv.invitee_id}
-                    className="flex items-center justify-between rounded-md border border-white/5 bg-black/20 px-3 py-2 text-sm"
+                    className="flex items-center justify-between rounded-md border border-white/5 bg-surface-1/80 px-3 py-2 text-sm"
                   >
                     <span className="truncate text-white/80">
                       {inv.full_name}
@@ -222,7 +222,7 @@ export function InviteMemberPanel({
                 {results.map((m) => (
                   <li
                     key={m.id}
-                    className="flex items-center gap-2 rounded-md border border-white/5 bg-black/20 p-2 text-sm"
+                    className="flex items-center gap-2 rounded-md border border-white/5 bg-surface-1/80 p-2 text-sm"
                   >
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-white">{m.full_name}</div>
@@ -234,7 +234,7 @@ export function InviteMemberPanel({
                       type="button"
                       onClick={() => handleInvite(m.id)}
                       disabled={pending}
-                      className="shrink-0 rounded-md bg-accent px-3 py-1 text-xs font-semibold text-white hover:bg-accent/90 disabled:opacity-50"
+                      className="shrink-0 rounded-md bg-accent px-3 py-1 text-xs font-semibold text-white hover:bg-accent/90 disabled:opacity-50 transition-all duration-200 active:scale-[0.98]"
                     >
                       {pending ? "…" : "Invite"}
                     </button>

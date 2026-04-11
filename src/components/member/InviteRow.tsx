@@ -37,7 +37,7 @@ export function InviteRow({ entry }: InviteRowProps) {
   };
 
   return (
-    <li className="rounded-lg border border-white/5 bg-black/20 p-3">
+    <li className="rounded-lg border border-white/5 bg-surface-1/80 p-3">
       <Link
         href={booking ? `/bookings/${booking.id}` : "#"}
         className="block"
@@ -77,7 +77,7 @@ export function InviteRow({ entry }: InviteRowProps) {
               type="button"
               onClick={() => handleRespond("accepted")}
               disabled={isPending}
-              className="flex-1 rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-accent/90 disabled:opacity-50"
+              className="flex-1 rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-white transition-all duration-200 hover:bg-accent/90 disabled:opacity-50 active:scale-[0.98]"
             >
               {isPending ? "…" : "Accept"}
             </button>

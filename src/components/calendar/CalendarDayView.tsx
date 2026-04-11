@@ -61,7 +61,7 @@ export function CalendarDayView({ day }: CalendarDayViewProps) {
         onToday={() => goToDate(todaySGT())}
       />
 
-      <div className="overflow-x-auto rounded-2xl border border-white/10 bg-surface/60 p-3">
+      <div className="overflow-x-auto rounded-2xl border border-white/10 bg-surface-1 p-3">
         <div
           role="grid"
           aria-label="Calendar day grid"
@@ -210,7 +210,7 @@ function DateBar({
   onToday: () => void;
 }) {
   return (
-    <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-surface/60 p-3">
+    <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-surface-1 p-3">
       <button
         type="button"
         onClick={onPrev}
@@ -273,7 +273,7 @@ function DetailPanel({
 }) {
   const slot = selected.slot;
   return (
-    <div className="rounded-xl border border-white/10 bg-surface/80 p-4">
+    <div className="rounded-xl border border-white/10 bg-surface-2 p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[11px] uppercase tracking-wider text-white/40">
@@ -312,10 +312,10 @@ function DetailPanel({
 
 const STATUS_STYLES = {
   available: {
-    classes: "border-white/5 bg-black/20 text-white/40 hover:bg-white/5",
+    classes: "border-white/5 bg-surface-1/80 text-white/40 hover:bg-white/5",
     label: "Available",
     badge: "free",
-    swatch: "bg-black/40 border border-white/10",
+    swatch: "bg-surface-3 border border-white/10",
   },
   booked_member: {
     classes:

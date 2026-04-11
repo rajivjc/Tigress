@@ -48,7 +48,7 @@ export function OwnerMembershipControls({
   tiers,
 }: OwnerMembershipControlsProps) {
   return (
-    <section className="space-y-3 rounded-2xl border border-white/10 bg-surface/60 p-4">
+    <section className="space-y-3 rounded-2xl border border-white/10 bg-surface-1 p-4">
       <p className="text-[11px] uppercase tracking-wider text-white/40">
         Owner controls
       </p>
@@ -115,7 +115,7 @@ function TierSection({
   };
 
   return (
-    <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+    <div className="rounded-xl border border-white/10 bg-surface-1/80 p-3">
       <p className="mb-2 text-[11px] uppercase tracking-wider text-white/50">
         Membership tier
       </p>
@@ -123,7 +123,7 @@ function TierSection({
         <select
           value={selected}
           onChange={(e) => setSelected(e.target.value)}
-          className="flex-1 rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-accent"
+          className="flex-1 rounded-lg border border-white/10 bg-surface-3 px-3 py-2.5 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
         >
           <option value={NO_TIER_VALUE}>No tier</option>
           {tiers.map((t) => (
@@ -136,7 +136,7 @@ function TierSection({
           type="button"
           onClick={handleSave}
           disabled={pending || !dirty}
-          className="rounded-md bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent/90 disabled:opacity-40"
+          className="rounded-md bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent/90 disabled:opacity-40 transition-all duration-200 active:scale-[0.98]"
         >
           {pending ? "Saving…" : "Save tier"}
         </button>
@@ -238,7 +238,7 @@ function CreditSection({
   };
 
   return (
-    <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+    <div className="rounded-xl border border-white/10 bg-surface-1/80 p-3">
       <div className="mb-2 flex items-end justify-between gap-3">
         <div>
           <p className="text-[11px] uppercase tracking-wider text-white/50">
@@ -259,13 +259,13 @@ function CreditSection({
           step={1}
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          className="flex-1 rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-accent"
+          className="flex-1 rounded-lg border border-white/10 bg-surface-3 px-3 py-2.5 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
         />
         <button
           type="button"
           onClick={handleSave}
           disabled={pending || !dirty}
-          className="rounded-md bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent/90 disabled:opacity-40"
+          className="rounded-md bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent/90 disabled:opacity-40 transition-all duration-200 active:scale-[0.98]"
         >
           {pending ? "Saving…" : "Save credits"}
         </button>
@@ -326,7 +326,7 @@ function StatusSection({
   };
 
   return (
-    <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+    <div className="rounded-xl border border-white/10 bg-surface-1/80 p-3">
       <p className="mb-2 text-[11px] uppercase tracking-wider text-white/50">
         Subscription status
       </p>
@@ -334,7 +334,7 @@ function StatusSection({
         <select
           value={value}
           onChange={(e) => setValue(e.target.value as SubscriptionStatus)}
-          className="flex-1 rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-accent"
+          className="flex-1 rounded-lg border border-white/10 bg-surface-3 px-3 py-2.5 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
         >
           {STATUS_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
@@ -346,7 +346,7 @@ function StatusSection({
           type="button"
           onClick={handleSave}
           disabled={pending || !dirty}
-          className="rounded-md bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent/90 disabled:opacity-40"
+          className="rounded-md bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent/90 disabled:opacity-40 transition-all duration-200 active:scale-[0.98]"
         >
           {pending ? "Saving…" : "Save status"}
         </button>
@@ -378,7 +378,7 @@ function MiniStat({
   value: string | number;
 }) {
   return (
-    <div className="rounded-md border border-white/10 bg-black/30 p-2">
+    <div className="rounded-md border border-white/10 bg-surface-2 p-2">
       <p className="text-xs font-semibold text-white">{value}</p>
       <p className="mt-0.5 text-[9px] uppercase tracking-wider text-white/40">
         {label}

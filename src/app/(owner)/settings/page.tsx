@@ -40,7 +40,7 @@ export default async function SettingsPage() {
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-wider text-white/60">
           Booking rules
         </h2>
-        <div className="space-y-2 rounded-xl border border-white/10 bg-black/20 p-4 text-sm">
+        <div className="space-y-2 rounded-xl border border-white/10 bg-surface-1/80 p-4 text-sm">
           <Rule
             label="Venue opens"
             value={`${String(VENUE_OPEN_HOUR).padStart(2, "0")}:00`}

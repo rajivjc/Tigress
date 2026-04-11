@@ -47,7 +47,7 @@ export default async function BookingsPage({
       </header>
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-black/20 p-1">
+      <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-surface-1/80 p-1">
         <Link
           href="/bookings?tab=upcoming"
           className={`flex-1 rounded-md px-3 py-2 text-center text-xs font-medium transition-colors ${
@@ -85,7 +85,7 @@ export default async function BookingsPage({
       {tab === "upcoming" && (
         <Link
           href="/book"
-          className="flex w-full items-center justify-center rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent/90"
+          className="flex w-full items-center justify-center rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-accent/90 active:scale-[0.98]"
         >
           Book a table
         </Link>

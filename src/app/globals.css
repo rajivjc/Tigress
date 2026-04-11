@@ -16,6 +16,7 @@ body {
   color: #ffffff;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-weight: 500;
   background-image:
     radial-gradient(
       circle at 20% 0%,
@@ -28,4 +29,35 @@ body {
       transparent 50%
     );
   background-attachment: fixed;
+}
+
+@keyframes shimmer {
+  0% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.7;
+  }
+  100% {
+    opacity: 0.4;
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
 }

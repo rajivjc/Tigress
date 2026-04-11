@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { CalendarDays } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { formatDateShort, formatTimeRange } from "@/lib/format";
 import type { BookingWithRelations } from "@/lib/data/bookings";
 
@@ -9,7 +11,7 @@ interface UpcomingBookingsProps {
 
 export function UpcomingBookings({ bookings }: UpcomingBookingsProps) {
   return (
-    <section className="rounded-2xl border border-white/10 bg-surface/60 p-5 shadow-xl backdrop-blur">
+    <section className="rounded-2xl border border-white/10 bg-surface-1 p-5 shadow-xl ">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold uppercase tracking-wider text-white/40">
           Upcoming bookings
@@ -25,15 +27,12 @@ export function UpcomingBookings({ bookings }: UpcomingBookingsProps) {
       </div>
 
       {bookings.length === 0 ? (
-        <div className="mt-4 rounded-lg border border-dashed border-white/10 bg-black/20 p-5 text-center">
-          <p className="text-sm text-white/60">No upcoming bookings</p>
-          <Link
-            href="/book"
-            className="mt-3 inline-block text-sm font-medium text-accent hover:underline"
-          >
-            Book a table →
-          </Link>
-        </div>
+        <EmptyState
+          icon={CalendarDays}
+          title="No upcoming bookings"
+          actionLabel="Book a table"
+          actionHref="/book"
+        />
       ) : (
         <ul className="mt-4 space-y-3">
           {bookings.map(({ booking, table, invites }) => {
@@ -44,7 +43,7 @@ export function UpcomingBookings({ bookings }: UpcomingBookingsProps) {
               <li key={booking.id}>
                 <Link
                   href={`/bookings/${booking.id}`}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-black/20 p-3 transition-colors hover:border-white/20 hover:bg-black/40"
+                  className="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-surface-1/80 p-3 transition-colors hover:border-white/20 hover:bg-surface-3"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium text-white">

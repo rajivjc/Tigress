@@ -149,7 +149,7 @@ export function WalkInForm({ tables, initialTableId }: WalkInFormProps) {
         <select
           value={tableId}
           onChange={(e) => setTableId(e.target.value)}
-          className="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none"
+          className="w-full rounded-lg border border-white/10 bg-surface-2 px-3 py-2.5 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
           required
         >
           {tables.map((t) => (
@@ -167,7 +167,7 @@ export function WalkInForm({ tables, initialTableId }: WalkInFormProps) {
           min={today}
           max={maxDate}
           onChange={(e) => setDate(e.target.value || today)}
-          className="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none"
+          className="w-full rounded-lg border border-white/10 bg-surface-2 px-3 py-2.5 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
           required
         />
       </Section>
@@ -176,7 +176,7 @@ export function WalkInForm({ tables, initialTableId }: WalkInFormProps) {
         <select
           value={startHour}
           onChange={(e) => setStartHour(Number(e.target.value))}
-          className="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none"
+          className="w-full rounded-lg border border-white/10 bg-surface-2 px-3 py-2.5 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
         >
           {HOURS.map((h) => {
             const slotStart = dateAtHourSGT(date, h).toISOString();
@@ -193,7 +193,7 @@ export function WalkInForm({ tables, initialTableId }: WalkInFormProps) {
 
         {/* Availability summary so staff can eyeball conflicts without
             submitting the form first. */}
-        <div className="mt-2 rounded-md border border-white/10 bg-black/20 p-2 text-[11px] text-white/60">
+        <div className="mt-2 rounded-md border border-white/10 bg-surface-1/80 p-2 text-[11px] text-white/60">
           {slotsLoading && "Checking availability…"}
           {!slotsLoading && slots && unavailableRanges.length === 0 && (
             <span className="text-emerald-300/80">
@@ -258,7 +258,7 @@ export function WalkInForm({ tables, initialTableId }: WalkInFormProps) {
           onChange={(e) => setGuestName(e.target.value)}
           required
           maxLength={100}
-          className="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none"
+          className="w-full rounded-lg border border-white/10 bg-surface-2 px-3 py-2.5 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
           placeholder="Jane Doe"
         />
       </Section>
@@ -268,7 +268,7 @@ export function WalkInForm({ tables, initialTableId }: WalkInFormProps) {
           type="tel"
           value={guestPhone}
           onChange={(e) => setGuestPhone(e.target.value)}
-          className="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none"
+          className="w-full rounded-lg border border-white/10 bg-surface-2 px-3 py-2.5 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
           placeholder="+65 9123 4567"
         />
       </Section>
@@ -282,7 +282,7 @@ export function WalkInForm({ tables, initialTableId }: WalkInFormProps) {
           onChange={(e) =>
             setGuestCount(Math.max(1, Number(e.target.value) || 1))
           }
-          className="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none"
+          className="w-full rounded-lg border border-white/10 bg-surface-2 px-3 py-2.5 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
         />
       </Section>
 
@@ -291,7 +291,7 @@ export function WalkInForm({ tables, initialTableId }: WalkInFormProps) {
           value={comments}
           onChange={(e) => setComments(e.target.value)}
           rows={3}
-          className="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none"
+          className="w-full rounded-lg border border-white/10 bg-surface-2 px-3 py-2.5 text-sm text-white outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
           placeholder="Birthday party, prefers low table…"
         />
       </Section>
@@ -325,7 +325,7 @@ export function WalkInForm({ tables, initialTableId }: WalkInFormProps) {
       <button
         type="submit"
         disabled={pending || !tableId || !guestName.trim()}
-        className="w-full rounded-lg bg-accent px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-40"
+        className="w-full rounded-lg bg-accent px-4 py-3 text-sm font-semibold text-white transition-all duration-200 hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-40 active:scale-[0.98]"
       >
         {pending ? "Creating…" : "Create walk-in"}
       </button>
@@ -362,7 +362,7 @@ function Toggle({
   onChange: (v: boolean) => void;
 }) {
   return (
-    <label className="flex items-center justify-between rounded-md border border-white/10 bg-black/20 px-3 py-2 text-sm text-white/80">
+    <label className="flex items-center justify-between rounded-md border border-white/10 bg-surface-1/80 px-3 py-2 text-sm text-white/80">
       <span>{label}</span>
       <input
         type="checkbox"

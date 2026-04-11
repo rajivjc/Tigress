@@ -69,7 +69,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-surface/60 p-6 shadow-xl backdrop-blur">
+    <div className="rounded-2xl border border-white/10 bg-surface-1 p-6 shadow-xl ">
       <h2 className="mb-1 text-xl font-semibold text-white">Create account</h2>
       <p className="mb-6 text-sm text-white/50">
         Join Tigress as a member
@@ -97,7 +97,7 @@ export default function RegisterPage() {
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
             placeholder="Jane Doe"
-            className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-accent"
+            className="w-full rounded-lg border border-white/10 bg-surface-2 px-3 py-2.5 text-sm text-white placeholder-white/30 outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
           />
         </div>
         <div>
@@ -114,7 +114,7 @@ export default function RegisterPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
-            className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-accent"
+            className="w-full rounded-lg border border-white/10 bg-surface-2 px-3 py-2.5 text-sm text-white placeholder-white/30 outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
           />
         </div>
         <div>
@@ -130,7 +130,7 @@ export default function RegisterPage() {
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             placeholder="+65 9123 4567"
-            className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-accent"
+            className="w-full rounded-lg border border-white/10 bg-surface-2 px-3 py-2.5 text-sm text-white placeholder-white/30 outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
           />
         </div>
         <div>
@@ -148,7 +148,7 @@ export default function RegisterPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="At least 8 characters"
-            className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-accent"
+            className="w-full rounded-lg border border-white/10 bg-surface-2 px-3 py-2.5 text-sm text-white placeholder-white/30 outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
           />
         </div>
         <div>
@@ -166,7 +166,7 @@ export default function RegisterPage() {
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             placeholder="••••••••"
-            className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-accent"
+            className="w-full rounded-lg border border-white/10 bg-surface-2 px-3 py-2.5 text-sm text-white placeholder-white/30 outline-none ring-0 transition-colors duration-200 focus:ring-2 focus:ring-accent/30 focus:border-accent"
           />
         </div>
 
@@ -179,7 +179,7 @@ export default function RegisterPage() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+          className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-60 transition-all duration-200 active:scale-[0.98]"
         >
           {loading ? "Creating account..." : "Create account"}
         </button>

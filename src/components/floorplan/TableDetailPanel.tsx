@@ -84,7 +84,7 @@ export function TableDetailPanel({
         role="dialog"
         aria-modal="true"
         aria-label={`Table ${table.table_number} details`}
-        className="relative w-full max-w-md rounded-t-3xl border border-white/10 bg-surface p-6 shadow-2xl md:rounded-3xl"
+        className="relative w-full max-w-md rounded-t-3xl border border-white/10 bg-surface-2 p-6 shadow-2xl md:rounded-3xl"
       >
         <div
           aria-hidden="true"
@@ -130,7 +130,7 @@ export function TableDetailPanel({
               <button
                 type="button"
                 onClick={() => onBook(table.id)}
-                className="flex-1 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent/90"
+                className="flex-1 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-accent/90 active:scale-[0.98]"
               >
                 Book this table
               </button>
@@ -225,7 +225,7 @@ function AvailableBody({ table }: { table: TableWithStatus }) {
         This table is free to book right now.
       </p>
       {table.next_booking && (
-        <p className="rounded-lg border border-white/10 bg-black/20 p-3 text-xs text-white/60">
+        <p className="rounded-lg border border-white/10 bg-surface-1/80 p-3 text-xs text-white/60">
           Next reservation at{" "}
           <span className="text-white">
             {formatTime(table.next_booking.starts_at)}
