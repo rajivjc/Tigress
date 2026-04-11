@@ -10,9 +10,26 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
-import { formatTime, formatTimeRange } from "@/lib/format";
+import { formatDateShort, formatTime, formatTimeRange } from "@/lib/format";
 import type { TableWithStatus } from "@/lib/data/tables";
 import type { UserRole } from "@/lib/types";
+
+/**
+ * When the panel is used inside the member booking flow we switch the body
+ * copy from "real-time" status to date-relative information so a member
+ * picking a day in the future doesn't see "in use until …" or "session
+ * starts in 45 min" which describe the wrong day.
+ */
+export interface BookingPanelContext {
+  /** YYYY-MM-DD the member is currently browsing for. */
+  selectedDate: string;
+  /** Bookable 1-hour slots on that date (from TableDateAvailability). */
+  availableSlots: number;
+  /** Total slots in the venue day (informational). */
+  totalSlots: number;
+  /** Whether the current member already has a booking on this table today. */
+  memberHasBooking: boolean;
+}
 
 export interface TableDetailPanelProps {
   table: TableWithStatus | null;
@@ -20,6 +37,11 @@ export interface TableDetailPanelProps {
   onClose: () => void;
   onBook?: (tableId: string) => void;
   onUnblock?: (tableId: string) => void;
+  /**
+   * When provided, the panel replaces its real-time copy with date-specific
+   * hints for the member booking flow.
+   */
+  bookingContext?: BookingPanelContext;
 }
 
 function isManagerRole(role: UserRole): boolean {
@@ -48,6 +70,7 @@ export function TableDetailPanel({
   onClose,
   onBook,
   onUnblock,
+  bookingContext,
 }: TableDetailPanelProps) {
   // Close on escape.
   useEffect(() => {
@@ -63,7 +86,12 @@ export function TableDetailPanel({
 
   const staff = isStaffRole(userRole);
   const manager = isManagerRole(userRole);
-  const canBook = table.computed_status === "available";
+  // In booking context gating is driven by `availableSlots > 0` (date-aware),
+  // not the real-time status, so a table that is currently "occupied" still
+  // lets the member book a later slot on the selected date.
+  const canBook = bookingContext
+    ? bookingContext.availableSlots > 0
+    : table.computed_status === "available";
   const isOccupied = table.computed_status === "occupied";
   const isReserved = table.computed_status === "reserved";
   const isAvailable = table.computed_status === "available";
@@ -96,8 +124,10 @@ export function TableDetailPanel({
             <p className="text-xs uppercase tracking-wider text-white/40">
               Table {table.table_number}
             </p>
-            <h2 className="mt-1 text-xl font-bold text-white capitalize">
-              {statusHeading(table.computed_status)}
+            <h2 className="mt-1 text-xl font-bold text-white">
+              {bookingContext
+                ? bookingHeading(bookingContext)
+                : statusHeading(table.computed_status)}
             </h2>
           </div>
           <button
@@ -110,17 +140,23 @@ export function TableDetailPanel({
         </header>
 
         <div className="mt-4 space-y-3 text-sm text-white/80">
-          {table.computed_status === "available" && (
-            <AvailableBody table={table} />
-          )}
-          {table.computed_status === "occupied" && (
-            <OccupiedBody table={table} staff={staff} />
-          )}
-          {table.computed_status === "reserved" && (
-            <ReservedBody table={table} />
-          )}
-          {table.computed_status === "blocked" && (
-            <BlockedBody table={table} />
+          {bookingContext ? (
+            <BookingContextBody context={bookingContext} />
+          ) : (
+            <>
+              {table.computed_status === "available" && (
+                <AvailableBody table={table} />
+              )}
+              {table.computed_status === "occupied" && (
+                <OccupiedBody table={table} staff={staff} />
+              )}
+              {table.computed_status === "reserved" && (
+                <ReservedBody table={table} />
+              )}
+              {table.computed_status === "blocked" && (
+                <BlockedBody table={table} />
+              )}
+            </>
           )}
         </div>
 
@@ -177,7 +213,7 @@ export function TableDetailPanel({
               </button>
             )}
 
-            {!canBook && !isBlocked && !staff && (
+            {!canBook && !staff && !(isBlocked && manager) && (
               <button
                 type="button"
                 onClick={onClose}
@@ -188,8 +224,10 @@ export function TableDetailPanel({
             )}
           </div>
 
-          {/* Manager/owner: block link, available on any non-blocked table */}
-          {manager && !isBlocked && (
+          {/* Manager/owner: block link, available on any non-blocked table.
+              Hidden inside the member booking flow (bookingContext is set
+              for members and the block action isn't meaningful there). */}
+          {manager && !isBlocked && !bookingContext && (
             <Link
               href={`/block?table=${encodeURIComponent(table.id)}`}
               className="block rounded-lg border border-white/10 px-4 py-2 text-center text-xs font-medium text-white/60 hover:bg-white/5"
@@ -307,6 +345,65 @@ function BlockedBody({ table }: { table: TableWithStatus }) {
       </p>
       {table.blocked_notes && (
         <p className="text-xs text-white/60">{table.blocked_notes}</p>
+      )}
+    </>
+  );
+}
+
+// ---------- Booking-context variants ----------
+
+function bookingContextStatus(
+  ctx: BookingPanelContext
+): "available" | "limited" | "full" {
+  if (ctx.availableSlots === 0) return "full";
+  if (ctx.availableSlots <= 3) return "limited";
+  return "available";
+}
+
+function bookingHeading(ctx: BookingPanelContext): string {
+  const prettyDate = formatDateShort(`${ctx.selectedDate}T12:00:00.000Z`);
+  const variant = bookingContextStatus(ctx);
+  if (variant === "full") return `Fully booked on ${prettyDate}`;
+  if (variant === "limited") {
+    return `${ctx.availableSlots} slot${
+      ctx.availableSlots === 1 ? "" : "s"
+    } open on ${prettyDate}`;
+  }
+  return `${ctx.availableSlots} slots open on ${prettyDate}`;
+}
+
+function BookingContextBody({ context }: { context: BookingPanelContext }) {
+  const variant = bookingContextStatus(context);
+  return (
+    <>
+      {variant === "available" && (
+        <p className="rounded-lg border border-emerald-400/30 bg-emerald-400/5 p-3 text-white/80">
+          Tap{" "}
+          <span className="font-semibold text-white">
+            &ldquo;Book this table&rdquo;
+          </span>{" "}
+          to pick a time.
+        </p>
+      )}
+      {variant === "limited" && (
+        <p className="rounded-lg border border-amber-400/30 bg-amber-400/5 p-3 text-white/80">
+          Only{" "}
+          <span className="font-semibold text-amber-200">
+            {context.availableSlots} slot
+            {context.availableSlots === 1 ? "" : "s"}
+          </span>{" "}
+          left. Tap to pick a time.
+        </p>
+      )}
+      {variant === "full" && (
+        <p className="rounded-lg border border-white/10 bg-white/5 p-3 text-white/70">
+          No available slots on this date. Try another day or table.
+        </p>
+      )}
+      {context.memberHasBooking && (
+        <p className="rounded-lg border border-accent/40 bg-accent/10 p-3 text-xs text-white/80">
+          You already have a booking on this table on this date.
+        </p>
       )}
     </>
   );
