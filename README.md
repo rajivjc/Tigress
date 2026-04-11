@@ -37,6 +37,21 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+### Database (Supabase)
+
+The schema lives in [`supabase/migrations/001_initial_schema.sql`](supabase/migrations/001_initial_schema.sql).
+It creates all Phase 1 tables, indexes, RLS policies, triggers and seed data
+(7 billiards tables, 2 placeholder membership tiers, and a starter rate card).
+
+No Supabase project is wired up yet. When one is created, run the migration via
+either the Supabase CLI:
+
+```bash
+supabase db push
+```
+
+or by pasting the SQL file into the Supabase SQL editor on a fresh project.
+
 ### Environment variables
 
 | Name | Description |
@@ -52,8 +67,8 @@ Open [http://localhost:3000](http://localhost:3000).
 src/
   app/
     (auth)/          # login, forgot-password
-    (member)/        # dashboard, book, bookings, profile, invites
-    (staff)/         # floor, calendar, walk-in, members
+    (member)/        # dashboard, book, bookings, bookings/[id], profile, invites
+    (staff)/         # floor, calendar, walk-in, members, members/[id]
     (owner)/         # settings, rates
   components/
     ui/              # Shared UI (PlaceholderPage, nav, header)
@@ -66,6 +81,8 @@ src/
     constants.ts     # App constants
   hooks/             # Custom React hooks
   middleware.ts      # Next.js middleware (session refresh)
+supabase/
+  migrations/        # SQL migrations (001_initial_schema.sql)
 ```
 
 ## Design
@@ -79,7 +96,8 @@ Dark themed for a bar/billiards club vibe. Palette:
 | Background | `#0F0F23` |
 | Surface | `#16213E` |
 
-Mobile-first: members get a bottom nav, staff/owner get a sidebar on desktop.
+Mobile-first: members get a bottom nav. Staff/owner get a sidebar on desktop
+and a bottom nav on mobile/tablet (where staff are most likely to be working).
 
 ## Spec
 
