@@ -22,10 +22,30 @@ export type TierPatch = Partial<
     | "credits_per_month"
     | "priority_booking_days"
     | "guest_passes_per_month"
+    | "stripe_price_id"
   >
 >;
 
 export type TierInput = Omit<TierPatch, "name"> & { name: string };
+
+function validateTierNumbers(
+  patch: TierPatch
+): { ok: boolean; error?: string } {
+  const numericFields: (keyof TierPatch)[] = [
+    "monthly_price_cents",
+    "credits_per_month",
+    "priority_booking_days",
+    "guest_passes_per_month",
+  ];
+  for (const field of numericFields) {
+    const value = patch[field];
+    if (value === undefined) continue;
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+      return { ok: false, error: `${field} must be a non-negative number` };
+    }
+  }
+  return { ok: true };
+}
 
 export async function updateTier(
   tierId: string,
@@ -34,6 +54,8 @@ export async function updateTier(
   if (Object.keys(patch).length === 0) {
     return { success: true };
   }
+  const v = validateTierNumbers(patch);
+  if (!v.ok) return { success: false, error: v.error };
 
   if (!isSupabaseConfigured()) {
     const row = MOCK_TIERS.find((t) => t.id === tierId);
@@ -58,6 +80,8 @@ export async function createTier(
   if (!input.name || input.name.trim().length === 0) {
     return { success: false, error: "Name is required" };
   }
+  const v = validateTierNumbers(input);
+  if (!v.ok) return { success: false, error: v.error };
 
   if (!isSupabaseConfigured()) {
     const id = `mock-tier-${Date.now()}`;
@@ -71,6 +95,7 @@ export async function createTier(
       guest_passes_per_month: input.guest_passes_per_month ?? 0,
       perks: [],
       sort_order: MOCK_TIERS.length + 1,
+      stripe_price_id: input.stripe_price_id ?? null,
       created_at: nowIso,
       updated_at: nowIso,
     };
@@ -87,6 +112,7 @@ export async function createTier(
       credits_per_month: input.credits_per_month ?? 0,
       priority_booking_days: input.priority_booking_days ?? 3,
       guest_passes_per_month: input.guest_passes_per_month ?? 0,
+      stripe_price_id: input.stripe_price_id ?? null,
     })
     .select("id")
     .single();

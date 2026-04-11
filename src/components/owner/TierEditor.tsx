@@ -93,6 +93,12 @@ function TierReadRow({
             value={`${tier.guest_passes_per_month}/mo`}
           />
         </dl>
+        <p className="mt-2 truncate text-[10px] text-white/40">
+          <span className="uppercase tracking-wider">Stripe: </span>
+          <span className="font-mono text-white/60">
+            {tier.stripe_price_id ?? "—"}
+          </span>
+        </p>
       </div>
       <button
         type="button"
@@ -137,6 +143,9 @@ function TierForm({ tier, onCancel, onSaved }: TierFormProps) {
   const [guestPasses, setGuestPasses] = useState(
     tier ? String(tier.guest_passes_per_month) : "0"
   );
+  const [stripePriceId, setStripePriceId] = useState(
+    tier?.stripe_price_id ?? ""
+  );
 
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -146,12 +155,14 @@ function TierForm({ tier, onCancel, onSaved }: TierFormProps) {
     setError(null);
 
     const priceCents = Math.round(parseFloat(priceDollars || "0") * 100);
+    const trimmedPriceId = stripePriceId.trim();
     const payload = {
       name: name.trim(),
       monthly_price_cents: Number.isFinite(priceCents) ? priceCents : 0,
       credits_per_month: parseInt(credits || "0", 10),
       priority_booking_days: parseInt(priorityDays || "0", 10),
       guest_passes_per_month: parseInt(guestPasses || "0", 10),
+      stripe_price_id: trimmedPriceId.length > 0 ? trimmedPriceId : null,
     };
 
     if (!payload.name) {
@@ -224,6 +235,16 @@ function TierForm({ tier, onCancel, onSaved }: TierFormProps) {
           />
         </Field>
       </div>
+
+      <Field label="Stripe price ID (optional)">
+        <input
+          type="text"
+          value={stripePriceId}
+          onChange={(e) => setStripePriceId(e.target.value)}
+          placeholder="price_xxx"
+          className="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 font-mono text-xs text-white outline-none"
+        />
+      </Field>
 
       {error && (
         <p className="rounded-md border border-red-500/30 bg-red-500/10 p-2 text-[11px] text-red-300">

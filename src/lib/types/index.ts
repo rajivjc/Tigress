@@ -62,6 +62,7 @@ export interface MembershipTier {
   guest_passes_per_month: number;
   perks: unknown[];
   sort_order: number;
+  stripe_price_id: string | null;
   created_at: string;
   updated_at: string;
 }
