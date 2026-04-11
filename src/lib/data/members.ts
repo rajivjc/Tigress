@@ -80,6 +80,87 @@ export async function getMemberWithTier(
   return { member: member as Member, tier: membership_tiers };
 }
 
+export interface MemberSearchResult {
+  id: string;
+  full_name: string;
+  email: string;
+  membership_tier_id: string | null;
+}
+
+/**
+ * Partial-match search used by the invite flow to let a member find people
+ * to invite to their booking. Case-insensitive on name or email. Excludes
+ * the provided ids (booking owner + already-invited members).
+ */
+export async function searchMembers(
+  query: string,
+  excludeIds: string[]
+): Promise<MemberSearchResult[]> {
+  const term = query.trim().toLowerCase();
+  if (term.length === 0) return [];
+
+  if (!isSupabaseConfigured()) {
+    return MOCK_MEMBERS.filter((m) => {
+      if (excludeIds.includes(m.id)) return false;
+      return (
+        m.full_name.toLowerCase().includes(term) ||
+        m.email.toLowerCase().includes(term)
+      );
+    })
+      .slice(0, 10)
+      .map((m) => ({
+        id: m.id,
+        full_name: m.full_name,
+        email: m.email,
+        membership_tier_id: m.membership_tier_id,
+      }));
+  }
+
+  const supabase = createClient();
+  let queryBuilder = supabase
+    .from("members")
+    .select("id, full_name, email, membership_tier_id")
+    .or(`full_name.ilike.%${term}%,email.ilike.%${term}%`)
+    .eq("status", "active")
+    .order("full_name", { ascending: true })
+    .limit(10);
+
+  if (excludeIds.length > 0) {
+    queryBuilder = queryBuilder.not(
+      "id",
+      "in",
+      `(${excludeIds.join(",")})`
+    );
+  }
+
+  const { data } = await queryBuilder;
+  return (data as MemberSearchResult[] | null) ?? [];
+}
+
+/**
+ * Owner-only: attach (or clear) a Stripe customer id on a member row so
+ * downstream webhook events can resolve back to the right member.
+ */
+export async function linkStripeCustomer(
+  memberId: string,
+  stripeCustomerId: string | null
+): Promise<{ success: boolean; error?: string }> {
+  if (!isSupabaseConfigured()) {
+    const row = findMockMemberById(memberId);
+    if (!row) return { success: false, error: "Member not found" };
+    row.stripe_customer_id = stripeCustomerId;
+    row.updated_at = new Date().toISOString();
+    return { success: true };
+  }
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("members")
+    .update({ stripe_customer_id: stripeCustomerId })
+    .eq("id", memberId);
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
 /** Fetch a member by their primary key (used when resolving inviter/invitees). */
 export async function getMemberById(id: string): Promise<Member | null> {
   if (!isSupabaseConfigured()) {

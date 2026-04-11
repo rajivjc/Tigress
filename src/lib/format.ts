@@ -45,6 +45,16 @@ export function formatTimeRange(startIso: string, endIso: string): string {
   return `${formatTime(startIso)} – ${formatTime(endIso)}`;
 }
 
+/** "$100.00" — formats a cents value as SGD for display. */
+export function formatSGDCents(cents: number): string {
+  const dollars = cents / 100;
+  return new Intl.NumberFormat("en-SG", {
+    style: "currency",
+    currency: "SGD",
+    minimumFractionDigits: 2,
+  }).format(dollars);
+}
+
 /** Returns uppercased initials, e.g. "Mona Member" → "MM". */
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);

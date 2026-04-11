@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Avatar } from "@/components/ui/Avatar";
 import { CancelBookingButton } from "@/components/member/CancelBookingButton";
+import { InviteMemberButton } from "@/components/member/InviteMemberButton";
 import { getBookingById } from "@/lib/data/bookings";
 import { getCurrentAuthUserId, getMemberProfile } from "@/lib/data/members";
 import { formatDateShort, formatTimeRange } from "@/lib/format";
@@ -128,14 +129,15 @@ export default async function BookingDetailPage({
             Invited members
           </h2>
           {canManage && (
-            <button
-              type="button"
-              disabled
-              title="Coming soon"
-              className="rounded-md border border-white/10 px-3 py-1 text-[11px] text-white/40"
-            >
-              Invite a member
-            </button>
+            <InviteMemberButton
+              bookingId={booking.id}
+              ownerMemberId={member.id}
+              existingInvites={invites.map((inv) => ({
+                invitee_id: inv.invitee_id,
+                full_name: inv.invitee.full_name,
+                status: inv.status,
+              }))}
+            />
           )}
         </div>
 

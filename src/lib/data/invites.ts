@@ -72,6 +72,123 @@ async function getInvitesForMember(
   ) ?? [];
 }
 
+export async function createInvite(
+  bookingId: string,
+  inviterId: string,
+  inviteeId: string
+): Promise<{ success: boolean; inviteId?: string; error?: string }> {
+  // ----- Common validation in both modes -----
+  if (inviterId === inviteeId) {
+    return { success: false, error: "You can't invite yourself" };
+  }
+
+  if (!isSupabaseConfigured()) {
+    const booking = allMockBookings().find((b) => b.id === bookingId);
+    if (!booking) return { success: false, error: "Booking not found" };
+    if (booking.member_id !== inviterId) {
+      return {
+        success: false,
+        error: "Only the booking owner can invite members",
+      };
+    }
+    if (booking.status !== "confirmed") {
+      return {
+        success: false,
+        error: "Only confirmed bookings can send invites",
+      };
+    }
+    if (Date.parse(booking.starts_at) <= Date.now()) {
+      return { success: false, error: "This booking is in the past" };
+    }
+    const invitee = findMockMemberById(inviteeId);
+    if (!invitee) return { success: false, error: "Invitee not found" };
+
+    const existing = MOCK_BOOKING_INVITES.find(
+      (i) => i.booking_id === bookingId && i.invitee_id === inviteeId
+    );
+    if (existing) {
+      return { success: false, error: "Already invited" };
+    }
+
+    const id = `mock-invite-${Date.now()}`;
+    const nowIso = new Date().toISOString();
+    MOCK_BOOKING_INVITES.push({
+      id,
+      booking_id: bookingId,
+      inviter_id: inviterId,
+      invitee_id: inviteeId,
+      status: "pending",
+      created_at: nowIso,
+      updated_at: nowIso,
+    });
+    return { success: true, inviteId: id };
+  }
+
+  const supabase = createClient();
+
+  // Validate booking ownership + status.
+  const { data: bookingRow, error: bookingErr } = await supabase
+    .from("bookings")
+    .select("id, member_id, status, starts_at")
+    .eq("id", bookingId)
+    .maybeSingle();
+  if (bookingErr) return { success: false, error: bookingErr.message };
+  if (!bookingRow) return { success: false, error: "Booking not found" };
+
+  const booking = bookingRow as Pick<
+    Booking,
+    "id" | "member_id" | "status" | "starts_at"
+  >;
+  if (booking.member_id !== inviterId) {
+    return {
+      success: false,
+      error: "Only the booking owner can invite members",
+    };
+  }
+  if (booking.status !== "confirmed") {
+    return {
+      success: false,
+      error: "Only confirmed bookings can send invites",
+    };
+  }
+  if (Date.parse(booking.starts_at) <= Date.now()) {
+    return { success: false, error: "This booking is in the past" };
+  }
+
+  // Ensure invitee exists.
+  const { data: inviteeRow } = await supabase
+    .from("members")
+    .select("id")
+    .eq("id", inviteeId)
+    .maybeSingle();
+  if (!inviteeRow) return { success: false, error: "Invitee not found" };
+
+  // Ensure no existing invite for this (booking, invitee) pair.
+  const { data: existingRow } = await supabase
+    .from("booking_invites")
+    .select("id")
+    .eq("booking_id", bookingId)
+    .eq("invitee_id", inviteeId)
+    .maybeSingle();
+  if (existingRow) {
+    return { success: false, error: "Already invited" };
+  }
+
+  const { data: inserted, error: insertErr } = await supabase
+    .from("booking_invites")
+    .insert({
+      booking_id: bookingId,
+      inviter_id: inviterId,
+      invitee_id: inviteeId,
+      status: "pending",
+    })
+    .select("id")
+    .single();
+  if (insertErr) return { success: false, error: insertErr.message };
+
+  return { success: true, inviteId: (inserted as { id: string }).id };
+}
+
 export async function respondToInvite(
   inviteId: string,
   memberId: string,

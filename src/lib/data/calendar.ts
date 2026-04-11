@@ -16,7 +16,7 @@ import {
   MOCK_WALK_IN_GUESTS,
   findMockMemberById,
 } from "./mock-data";
-import { dateAtHourSGT, startOfDaySGT } from "@/lib/timezone";
+import { addDaysSGT, dateAtHourSGT, startOfDaySGT } from "@/lib/timezone";
 import { _mockBlocksForTesting } from "./blocks";
 import {
   VENUE_OPEN_HOUR,
@@ -94,6 +94,95 @@ export async function getCalendarDay(date: string): Promise<CalendarDay> {
     close_hour: VENUE_CLOSE_HOUR,
     tables: calendarTables,
   };
+}
+
+// ---------- Week summary ----------
+
+export interface CalendarWeekCell {
+  /** YYYY-MM-DD */
+  date: string;
+  table_id: string;
+  table_number: number;
+  /** Number of confirmed bookings touching this table on this date. */
+  booking_count: number;
+  /** Number of blocks on this table on this date. */
+  block_count: number;
+}
+
+export interface CalendarWeek {
+  /** Monday of the week (YYYY-MM-DD). */
+  week_start: string;
+  /** 7 dates, Monday → Sunday. */
+  dates: string[];
+  tables: Pick<Table, "id" | "table_number">[];
+  /** Row-major grid indexed by [tableIndex][dateIndex]. */
+  grid: CalendarWeekCell[][];
+}
+
+/**
+ * Returns a 7-day × N-table summary grid starting from the Monday on/before
+ * `anchorDate`. Each cell counts how many bookings / blocks touch that
+ * table on that day — used by the heat-map week view.
+ */
+export async function getCalendarWeek(
+  anchorDate: string
+): Promise<CalendarWeek> {
+  const weekStart = mondayOnOrBefore(anchorDate);
+  const dates: string[] = [];
+  for (let i = 0; i < 7; i++) dates.push(addDaysSGT(weekStart, i));
+
+  const rangeStart = startOfDaySGT(weekStart).toISOString();
+  const rangeEnd = new Date(
+    startOfDaySGT(addDaysSGT(weekStart, 7)).getTime()
+  ).toISOString();
+
+  const { tables, bookings, blocks } = await fetchDayData(rangeStart, rangeEnd);
+  const sortedTables = tables
+    .slice()
+    .sort((a, b) => a.table_number - b.table_number);
+
+  const grid: CalendarWeekCell[][] = sortedTables.map((table) => {
+    return dates.map((date) => {
+      const dayStart = startOfDaySGT(date).toISOString();
+      const dayEnd = new Date(
+        startOfDaySGT(addDaysSGT(date, 1)).getTime()
+      ).toISOString();
+
+      const booking_count = bookings.filter(
+        (b) =>
+          b.table_id === table.id &&
+          rangesOverlap(b.starts_at, b.ends_at, dayStart, dayEnd)
+      ).length;
+      const block_count = blocks.filter(
+        (b) =>
+          b.table_id === table.id &&
+          rangesOverlap(b.starts_at, b.ends_at, dayStart, dayEnd)
+      ).length;
+
+      return {
+        date,
+        table_id: table.id,
+        table_number: table.table_number,
+        booking_count,
+        block_count,
+      };
+    });
+  });
+
+  return {
+    week_start: weekStart,
+    dates,
+    tables: sortedTables,
+    grid,
+  };
+}
+
+/** Given any YYYY-MM-DD, returns the Monday of that date's ISO week. */
+function mondayOnOrBefore(date: string): string {
+  const d = startOfDaySGT(date);
+  // getUTCDay: 0=Sun..6=Sat — we want 0=Mon..6=Sun.
+  const isoDow = (d.getUTCDay() + 6) % 7;
+  return addDaysSGT(date, -isoDow);
 }
 
 // ---------- Slot grid construction ----------
