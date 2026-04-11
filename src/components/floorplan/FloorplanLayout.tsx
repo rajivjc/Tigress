@@ -19,6 +19,17 @@ export interface FloorplanLayoutProps {
   // Reserved for future use (staff-only badges, etc). Kept on the interface
   // to match the spec.
   userRole?: UserRole;
+  /**
+   * Override the default status labels shown on the table bodies. Used by the
+   * member booking flow so "occupied" reads as "Full" in that context.
+   */
+  statusLabels?: Partial<Record<ComputedTableStatus, string>>;
+  /**
+   * Table ids where the viewing member already has a confirmed booking on
+   * the currently-selected day. Rendered as a small accent badge to hint
+   * "YOUR BOOKING" without blocking the member from booking another slot.
+   */
+  memberBookingTableIds?: ReadonlySet<string>;
 }
 
 // ---------- Layout geometry ----------
@@ -95,6 +106,8 @@ export function FloorplanLayout({
   tables,
   selectedTableId,
   onSelectTable,
+  statusLabels,
+  memberBookingTableIds,
 }: FloorplanLayoutProps) {
   // Map table_number → TableWithStatus so layout order is deterministic.
   const byNumber = new Map<number, TableWithStatus>();
@@ -189,7 +202,11 @@ export function FloorplanLayout({
           if (!table) return null;
 
           const style = STATUS_STYLES[table.computed_status];
+          const label =
+            statusLabels?.[table.computed_status] ?? style.label;
           const isSelected = selectedTableId === table.id;
+          const hasMemberBooking =
+            memberBookingTableIds?.has(table.id) ?? false;
           const cx = pos.x + TABLE_W / 2;
           const cy = pos.y + TABLE_H / 2;
 
@@ -201,7 +218,9 @@ export function FloorplanLayout({
               className="cursor-pointer outline-none"
               tabIndex={0}
               role="button"
-              aria-label={`Table ${table.table_number} — ${style.label}`}
+              aria-label={`Table ${table.table_number} — ${label}${
+                hasMemberBooking ? " (your booking)" : ""
+              }`}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
@@ -270,8 +289,33 @@ export function FloorplanLayout({
                 fill={style.labelColor}
                 letterSpacing="1"
               >
-                {style.label.toUpperCase()}
+                {label.toUpperCase()}
               </text>
+
+              {/* "Your booking" accent badge */}
+              {hasMemberBooking && (
+                <g>
+                  <circle
+                    cx={pos.x + TABLE_W - 18}
+                    cy={pos.y + 18}
+                    r="8"
+                    fill="#E94560"
+                    stroke="#fff"
+                    strokeWidth="2"
+                  />
+                  <text
+                    x={pos.x + TABLE_W - 60}
+                    y={pos.y + 22}
+                    textAnchor="end"
+                    fontSize="10"
+                    fontWeight="700"
+                    fill="#fca5b7"
+                    letterSpacing="1"
+                  >
+                    YOURS
+                  </text>
+                </g>
+              )}
             </g>
           );
         })}
@@ -286,7 +330,7 @@ export function FloorplanLayout({
               className="h-2 w-2 rounded-full"
               style={{ backgroundColor: STATUS_STYLES[s].stroke }}
             />
-            <span className="capitalize">{s}</span>
+            <span>{statusLabels?.[s] ?? STATUS_STYLES[s].label}</span>
           </li>
         ))}
       </ul>

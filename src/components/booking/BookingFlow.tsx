@@ -13,7 +13,7 @@
 // confirmation.
 // =============================================================================
 
-import { useState, useTransition } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { FloorplanLayout } from "@/components/floorplan/FloorplanLayout";
 import { TableDetailPanel } from "@/components/floorplan/TableDetailPanel";
@@ -21,8 +21,13 @@ import {
   createBookingAction,
   getAvailableSlotsAction,
 } from "@/app/actions/bookings";
+import { getTableAvailabilityForDateAction } from "@/app/actions/tables";
 import { formatDateShort, formatTime } from "@/lib/format";
-import type { TableWithStatus, TimeSlot } from "@/lib/data/tables";
+import type {
+  TableDateAvailability,
+  TableWithStatus,
+  TimeSlot,
+} from "@/lib/data/tables";
 
 interface BookingFlowProps {
   tables: TableWithStatus[];
@@ -55,6 +60,14 @@ export function BookingFlow({
   const [selectedTableId, setSelectedTableId] = useState<string | undefined>();
   const [peekedTableId, setPeekedTableId] = useState<string | undefined>();
 
+  // Per-date availability fetched via server action whenever the selected
+  // date changes. Replaces the real-time `tables` prop for the floorplan
+  // inside the booking flow so the view reflects the chosen day, not "now".
+  const [dateAvailability, setDateAvailability] = useState<
+    TableDateAvailability[] | null
+  >(null);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+
   const [slots, setSlots] = useState<TimeSlot[] | null>(null);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [slotsError, setSlotsError] = useState<string | null>(null);
@@ -67,12 +80,45 @@ export function BookingFlow({
   const [submitting, startSubmit] = useTransition();
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  // Derived view data for the floorplan/panel: map the per-date availability
+  // rows onto the TableWithStatus shape the components already understand.
+  // Before the first fetch completes we fall back to the SSR-fetched static
+  // status so the initial render isn't empty.
+  const floorplanTables: TableWithStatus[] = dateAvailability
+    ? dateAvailability.map(toFloorplanTable)
+    : tables;
+
+  const memberBookingTableIds = new Set(
+    (dateAvailability ?? [])
+      .filter((t) => t.member_has_booking)
+      .map((t) => t.id)
+  );
+
   const peekedTable = peekedTableId
-    ? tables.find((t) => t.id === peekedTableId) ?? null
+    ? floorplanTables.find((t) => t.id === peekedTableId) ?? null
+    : null;
+  const peekedAvailability = peekedTableId
+    ? dateAvailability?.find((t) => t.id === peekedTableId) ?? null
     : null;
   const selectedTable = selectedTableId
-    ? tables.find((t) => t.id === selectedTableId) ?? null
+    ? floorplanTables.find((t) => t.id === selectedTableId) ?? null
     : null;
+
+  // ---------- Date-specific availability fetch ----------
+
+  const loadDateAvailability = useCallback(async (date: string) => {
+    setAvailabilityLoading(true);
+    const result = await getTableAvailabilityForDateAction(date);
+    if (!result.error) {
+      setDateAvailability(result.tables);
+    }
+    setAvailabilityLoading(false);
+  }, []);
+
+  // Fetch on mount and whenever the selected date changes.
+  useEffect(() => {
+    void loadDateAvailability(selectedDate);
+  }, [selectedDate, loadDateAvailability]);
 
   // ---------- Handlers ----------
 
@@ -167,14 +213,31 @@ export function BookingFlow({
             onChange={handleDateChangeOnFloor}
           />
 
-          <FloorplanLayout
-            tables={tables}
-            selectedTableId={peekedTableId}
-            onSelectTable={handlePickTable}
-          />
+          {availabilityLoading && (
+            <p className="px-1 text-center text-[11px] text-white/40">
+              Checking availability…
+            </p>
+          )}
+
+          <div
+            className={`transition-opacity duration-200 ${
+              availabilityLoading
+                ? "pointer-events-none opacity-50"
+                : "opacity-100"
+            }`}
+          >
+            <FloorplanLayout
+              tables={floorplanTables}
+              selectedTableId={peekedTableId}
+              onSelectTable={handlePickTable}
+              statusLabels={{ occupied: "Full", reserved: "Reserved" }}
+              memberBookingTableIds={memberBookingTableIds}
+            />
+          </div>
 
           <p className="px-1 text-center text-xs text-white/50">
-            Tap any table to see details. Green tables are bookable now.
+            Tap any table to see details. Green tables have slots open on the
+            selected date.
           </p>
 
           {peekedTable && (
@@ -183,6 +246,16 @@ export function BookingFlow({
               userRole="member"
               onClose={() => setPeekedTableId(undefined)}
               onBook={handleConfirmTableChoice}
+              bookingContext={
+                peekedAvailability
+                  ? {
+                      selectedDate,
+                      availableSlots: peekedAvailability.available_slots,
+                      totalSlots: peekedAvailability.total_slots,
+                      memberHasBooking: peekedAvailability.member_has_booking,
+                    }
+                  : undefined
+              }
             />
           )}
         </>
@@ -241,9 +314,8 @@ function StepHeader({
   const labels: Record<Step, string> = {
     "select-table": "Pick a table",
     "pick-time": "Pick a time",
-    confirm: "Confirm",
+    confirm: "Confirm booking",
   };
-  const stepNum = step === "select-table" ? 1 : step === "pick-time" ? 2 : 3;
   return (
     <header className="flex items-center gap-3">
       {step !== "select-table" && (
@@ -255,12 +327,7 @@ function StepHeader({
           ← Back
         </button>
       )}
-      <div>
-        <p className="text-[11px] uppercase tracking-wider text-white/40">
-          Step {stepNum} of 3
-        </p>
-        <h1 className="text-lg font-bold text-white">{labels[step]}</h1>
-      </div>
+      <h1 className="text-lg font-bold text-white">{labels[step]}</h1>
     </header>
   );
 }
@@ -573,4 +640,28 @@ function durationFitsAt(
     if (!s || !s.available) return false;
   }
   return true;
+}
+
+/**
+ * Projects a date-specific availability row onto the `TableWithStatus` shape
+ * that `FloorplanLayout` already understands. `limited` collapses to
+ * `available` (still bookable, just fewer slots) and `full` reuses the
+ * `occupied` styling so the amber glow reads as "no slots left on this day".
+ */
+function toFloorplanTable(t: TableDateAvailability): TableWithStatus {
+  const statusMap: Record<
+    TableDateAvailability["status"],
+    TableWithStatus["computed_status"]
+  > = {
+    available: "available",
+    limited: "available",
+    full: "occupied",
+    blocked: "blocked",
+  };
+  return {
+    id: t.id,
+    table_number: t.table_number,
+    name: t.name,
+    computed_status: statusMap[t.status],
+  };
 }
