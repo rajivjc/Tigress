@@ -13,5 +13,10 @@ export default async function StaffMembersPage() {
 
   const members = await getAllMembers();
 
-  return <MembersList initialMembers={members} />;
+  return (
+    <MembersList
+      initialMembers={members}
+      canCreateMembers={current.role === "owner"}
+    />
+  );
 }

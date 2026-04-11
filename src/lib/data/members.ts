@@ -19,7 +19,13 @@ import {
   findMockTableById,
   findMockTierById,
 } from "./mock-data";
-import type { Booking, Member, MembershipTier, Table } from "@/lib/types";
+import type {
+  Booking,
+  Member,
+  MembershipTier,
+  SubscriptionStatus,
+  Table,
+} from "@/lib/types";
 
 export interface MemberWithTier {
   member: Member;
@@ -370,6 +376,247 @@ export async function updateMemberNotes(
     .eq("id", memberId);
   if (error) return { success: false, error: error.message };
   return { success: true };
+}
+
+/**
+ * Owner-only: assign (or clear) a member's membership tier. When a tier is
+ * being newly assigned and the member currently has zero credits, the tier's
+ * monthly allotment is also credited so the owner doesn't have to do two
+ * steps in the common case.
+ */
+export async function assignTier(
+  memberId: string,
+  tierId: string | null,
+  autoGrantCredits: boolean = true
+): Promise<{ success: boolean; error?: string }> {
+  if (!isSupabaseConfigured()) {
+    const row = findMockMemberById(memberId);
+    if (!row) return { success: false, error: "Member not found" };
+
+    row.membership_tier_id = tierId;
+    if (tierId) {
+      const tier = findMockTierById(tierId);
+      const wasUntiered = row.subscription_status === "none";
+      if (wasUntiered) {
+        row.subscription_status = "active";
+      }
+      if (autoGrantCredits && tier && row.credits_remaining === 0) {
+        row.credits_remaining = tier.credits_per_month;
+      }
+    }
+    row.updated_at = new Date().toISOString();
+    return { success: true };
+  }
+
+  const supabase = createClient();
+
+  // Read the current state so we know whether we should auto-activate and
+  // auto-grant credits. The action layer is owner-only, so this is safe.
+  const { data: existing } = await supabase
+    .from("members")
+    .select("credits_remaining, membership_tier_id, subscription_status")
+    .eq("id", memberId)
+    .maybeSingle();
+  if (!existing) return { success: false, error: "Member not found" };
+
+  const patch: Partial<Member> = { membership_tier_id: tierId };
+
+  if (tierId) {
+    const { data: tierRow } = await supabase
+      .from("membership_tiers")
+      .select("credits_per_month")
+      .eq("id", tierId)
+      .maybeSingle();
+
+    if (
+      (existing as { subscription_status: SubscriptionStatus })
+        .subscription_status === "none"
+    ) {
+      patch.subscription_status = "active";
+    }
+    if (
+      autoGrantCredits &&
+      tierRow &&
+      (existing as { credits_remaining: number }).credits_remaining === 0
+    ) {
+      patch.credits_remaining = (tierRow as {
+        credits_per_month: number;
+      }).credits_per_month;
+    }
+  }
+
+  const { error } = await supabase
+    .from("members")
+    .update(patch)
+    .eq("id", memberId);
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
+/** Owner-only: override a member's current credit balance. */
+export async function setCredits(
+  memberId: string,
+  credits: number
+): Promise<{ success: boolean; error?: string }> {
+  if (!Number.isFinite(credits) || credits < 0) {
+    return { success: false, error: "Credits must be zero or greater" };
+  }
+  const rounded = Math.floor(credits);
+
+  if (!isSupabaseConfigured()) {
+    const row = findMockMemberById(memberId);
+    if (!row) return { success: false, error: "Member not found" };
+    row.credits_remaining = rounded;
+    row.updated_at = new Date().toISOString();
+    return { success: true };
+  }
+
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("members")
+    .update({ credits_remaining: rounded })
+    .eq("id", memberId);
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
+/** Owner-only: manually override a member's subscription status. */
+export async function setSubscriptionStatus(
+  memberId: string,
+  status: SubscriptionStatus
+): Promise<{ success: boolean; error?: string }> {
+  if (!isSupabaseConfigured()) {
+    const row = findMockMemberById(memberId);
+    if (!row) return { success: false, error: "Member not found" };
+    row.subscription_status = status;
+    row.updated_at = new Date().toISOString();
+    return { success: true };
+  }
+
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("members")
+    .update({ subscription_status: status })
+    .eq("id", memberId);
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
+export interface CreateMemberInput {
+  full_name: string;
+  email: string;
+  phone: string | null;
+  password: string;
+  membership_tier_id: string | null;
+  credits_remaining: number;
+  subscription_status: SubscriptionStatus;
+  notes: string | null;
+}
+
+export interface CreateMemberResult {
+  success: boolean;
+  memberId?: string;
+  error?: string;
+}
+
+/**
+ * Owner-only: create a brand new member. In Supabase mode this provisions
+ * an auth user via the admin client so the owner sets the initial password,
+ * then inserts the matching `members` row. In mock mode we just push a row
+ * onto the in-memory list so the UI can be tested without a Supabase
+ * project.
+ */
+export async function createMember(
+  input: CreateMemberInput
+): Promise<CreateMemberResult> {
+  const now = new Date().toISOString();
+  const joinDate = now.slice(0, 10);
+
+  if (!isSupabaseConfigured()) {
+    // Mock mode: no auth layer, just push an in-memory row so the list/detail
+    // pages can render it.
+    const id = `mock-member-row-${MOCK_MEMBERS.length + 1}`;
+    const row: Member = {
+      id,
+      auth_user_id: null,
+      full_name: input.full_name,
+      email: input.email,
+      phone: input.phone,
+      avatar_url: null,
+      membership_tier_id: input.membership_tier_id,
+      subscription_status: input.subscription_status,
+      stripe_customer_id: null,
+      credits_remaining: input.credits_remaining,
+      credits_reset_date: null,
+      join_date: joinDate,
+      status: "active",
+      notes: input.notes,
+      created_at: now,
+      updated_at: now,
+    };
+    MOCK_MEMBERS.push(row);
+    return { success: true, memberId: id };
+  }
+
+  // Real mode requires the service-role key to create an auth user.
+  const { isSupabaseAdminConfigured } = await import("@/lib/supabase/env");
+  if (!isSupabaseAdminConfigured()) {
+    return {
+      success: false,
+      error:
+        "Creating members requires the Supabase service role key. Set SUPABASE_SERVICE_ROLE_KEY in the environment.",
+    };
+  }
+
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const admin = createAdminClient();
+
+  // 1. Create the auth user (owner chooses the initial password).
+  const { data: created, error: createError } =
+    await admin.auth.admin.createUser({
+      email: input.email,
+      password: input.password,
+      email_confirm: true,
+      user_metadata: { full_name: input.full_name },
+    });
+  if (createError || !created.user) {
+    return {
+      success: false,
+      error: createError?.message ?? "Failed to create user",
+    };
+  }
+  const authUserId = created.user.id;
+
+  // 2. Insert the members row.
+  const { data: inserted, error: insertError } = await admin
+    .from("members")
+    .insert({
+      auth_user_id: authUserId,
+      full_name: input.full_name,
+      email: input.email,
+      phone: input.phone,
+      membership_tier_id: input.membership_tier_id,
+      subscription_status: input.subscription_status,
+      credits_remaining: input.credits_remaining,
+      status: "active",
+      notes: input.notes,
+      join_date: joinDate,
+    })
+    .select("id")
+    .maybeSingle();
+
+  if (insertError || !inserted) {
+    // Roll back the orphan auth user.
+    await admin.auth.admin.deleteUser(authUserId).catch(() => {
+      /* best effort */
+    });
+    return {
+      success: false,
+      error: insertError?.message ?? "Failed to create member",
+    };
+  }
+
+  return { success: true, memberId: (inserted as { id: string }).id };
 }
 
 /** Persist profile updates. Returns the updated row on success. */
