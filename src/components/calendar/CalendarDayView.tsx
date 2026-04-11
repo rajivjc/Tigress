@@ -3,15 +3,23 @@
 // =============================================================================
 // CalendarDayView
 // =============================================================================
-// 7-column × 14-row CSS grid (one column per table, one row per hour). Each
-// booking renders as a coloured block that spans `slot.span` rows. Empty
-// slots are subtle dark cells; tapping a booking expands its details panel.
-// Date navigation reloads the page with a new `?date=YYYY-MM-DD` param.
+// Responsive calendar day view.
+//
+// - Mobile (< md): agenda list showing only booked/blocked slots, grouped by
+//   start hour. Taps on a booking card navigate to /bookings/{id}.
+// - Desktop (>= md): 7-column × 14-row CSS grid (one column per table, one
+//   row per hour). Bookings render as coloured blocks that span `slot.span`
+//   rows. Empty slots are subtle dark cells; tapping a booking expands its
+//   details panel. Date navigation reloads the page with a new
+//   `?date=YYYY-MM-DD` param.
 // =============================================================================
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { CalendarDays } from "lucide-react";
 import { addDaysSGT, todaySGT } from "@/lib/timezone";
+import { EmptyState } from "@/components/ui/EmptyState";
 import type { CalendarDay, CalendarSlot } from "@/lib/data/calendar";
 
 export interface CalendarDayViewProps {
@@ -19,6 +27,13 @@ export interface CalendarDayViewProps {
 }
 
 interface SelectedBlock {
+  table_number: number;
+  hour: number;
+  slot: CalendarSlot;
+}
+
+/** A booking/block slot flattened with its owning table number. */
+interface AgendaEntry {
   table_number: number;
   hour: number;
   slot: CalendarSlot;
@@ -61,45 +76,21 @@ export function CalendarDayView({ day }: CalendarDayViewProps) {
         onToday={() => goToDate(todaySGT())}
       />
 
-      <div className="overflow-x-auto rounded-2xl border border-white/10 bg-surface-1 p-3">
-        <div
-          role="grid"
-          aria-label="Calendar day grid"
-          className="grid min-w-[720px]"
-          style={{
-            gridTemplateColumns: `48px repeat(${day.tables.length}, minmax(80px, 1fr))`,
-            gridTemplateRows: `28px repeat(${hours.length}, 56px)`,
-            gap: "4px",
-          }}
-        >
-          {/* Header row: empty corner + table labels */}
-          <div />
-          {day.tables.map((t) => (
-            <div
-              key={t.table_id}
-              role="columnheader"
-              className="flex items-center justify-center text-[11px] font-semibold uppercase tracking-wider text-white/60"
-            >
-              T{t.table_number}
-            </div>
-          ))}
+      {/* Mobile: compact agenda list of booked/blocked slots only. */}
+      <div className="space-y-3 md:hidden">
+        <AgendaSummary day={day} />
+        <AgendaList day={day} />
+      </div>
 
-          {/* Hour rows */}
-          {hours.map((hour, rowIdx) => (
-            // Each hour row contributes a label + 7 cells. We render the
-            // label cell here, then map across all tables. The cells use
-            // `gridRowStart` to anchor themselves correctly.
-            <HourRow
-              key={hour}
-              hour={hour}
-              rowIdx={rowIdx + 2 /* skip header row */}
-              day={day}
-              onSelect={(table_number, slot) =>
-                setSelected({ table_number, hour, slot })
-              }
-            />
-          ))}
-        </div>
+      {/* Desktop: full 7-column grid. */}
+      <div className="hidden md:block">
+        <DayGrid
+          day={day}
+          hours={hours}
+          onSelect={(table_number, hour, slot) =>
+            setSelected({ table_number, hour, slot })
+          }
+        />
       </div>
 
       <Legend />
@@ -112,6 +103,213 @@ export function CalendarDayView({ day }: CalendarDayViewProps) {
       )}
     </div>
   );
+}
+
+// ---------- Desktop grid ----------
+
+function DayGrid({
+  day,
+  hours,
+  onSelect,
+}: {
+  day: CalendarDay;
+  hours: number[];
+  onSelect: (table_number: number, hour: number, slot: CalendarSlot) => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-surface-1 p-3">
+      <div
+        role="grid"
+        aria-label="Calendar day grid"
+        className="grid"
+        style={{
+          gridTemplateColumns: `48px repeat(${day.tables.length}, minmax(0, 1fr))`,
+          gridTemplateRows: `28px repeat(${hours.length}, 56px)`,
+          gap: "4px",
+        }}
+      >
+        {/* Header row: empty corner + table labels */}
+        <div />
+        {day.tables.map((t) => (
+          <div
+            key={t.table_id}
+            role="columnheader"
+            className="flex items-center justify-center text-[11px] font-semibold uppercase tracking-wider text-white/60"
+          >
+            T{t.table_number}
+          </div>
+        ))}
+
+        {/* Hour rows */}
+        {hours.map((hour, rowIdx) => (
+          // Each hour row contributes a label + N cells. We render the
+          // label cell here, then map across all tables. The cells use
+          // `gridRowStart` to anchor themselves correctly.
+          <HourRow
+            key={hour}
+            hour={hour}
+            rowIdx={rowIdx + 2 /* skip header row */}
+            day={day}
+            onSelect={(table_number, slot) => onSelect(table_number, hour, slot)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Mobile agenda list ----------
+
+function AgendaSummary({ day }: { day: CalendarDay }) {
+  const counts = useMemo(() => countAgendaEntries(day), [day]);
+  const parts: string[] = [];
+  if (counts.member > 0) {
+    parts.push(`${counts.member} member`);
+  }
+  if (counts.walkin > 0) {
+    parts.push(`${counts.walkin} walk-in`);
+  }
+  if (counts.blocked > 0) {
+    parts.push(`${counts.blocked} blocked`);
+  }
+  const label = parts.length === 0 ? "No activity today" : parts.join(" · ");
+  return (
+    <div className="rounded-xl border border-white/10 bg-surface-1 px-4 py-3 text-xs text-white/70">
+      {label}
+    </div>
+  );
+}
+
+function AgendaList({ day }: { day: CalendarDay }) {
+  const groups = useMemo(() => groupAgendaByHour(collectAgendaEntries(day)), [day]);
+
+  if (groups.length === 0) {
+    return (
+      <div className="rounded-2xl border border-white/10 bg-surface-1">
+        <EmptyState
+          icon={CalendarDays}
+          title="No bookings today"
+          description="Booked and blocked slots will appear here."
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {groups.map((group) => (
+        <section key={group.hour} className="space-y-2">
+          <div className="sticky top-0 z-10 -mx-4 bg-background/95 px-4 py-1 text-[11px] font-semibold uppercase tracking-wider text-white/50 backdrop-blur">
+            {formatHourLabel(group.hour)}
+          </div>
+          <ul className="space-y-2">
+            {group.entries.map((entry) => (
+              <li key={`${entry.table_number}-${entry.hour}`}>
+                <AgendaCard entry={entry} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function AgendaCard({ entry }: { entry: AgendaEntry }) {
+  const { slot, table_number } = entry;
+  const style = STATUS_STYLES[slot.status];
+  const accent = AGENDA_ACCENTS[slot.status];
+  const durationLabel = `${slot.span ?? 1}h`;
+  const label = slot.label ?? style.label;
+
+  const body = (
+    <div
+      className={`flex items-center gap-3 rounded-xl border border-white/10 bg-surface-1 p-3 ${accent.border}`}
+    >
+      <span
+        className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg text-xs font-bold ${accent.badge}`}
+      >
+        T{table_number}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold text-white">{label}</p>
+        <p className="text-[11px] uppercase tracking-wider text-white/50">
+          {style.label} · {durationLabel}
+        </p>
+      </div>
+      {slot.booking_id && (
+        <span aria-hidden="true" className="text-white/30">
+          ›
+        </span>
+      )}
+    </div>
+  );
+
+  if (slot.booking_id) {
+    return (
+      <Link
+        href={`/bookings/${slot.booking_id}`}
+        className="block transition-colors hover:bg-white/5"
+      >
+        {body}
+      </Link>
+    );
+  }
+
+  return body;
+}
+
+// ---------- Agenda helpers ----------
+
+function collectAgendaEntries(day: CalendarDay): AgendaEntry[] {
+  const entries: AgendaEntry[] = [];
+  for (const table of day.tables) {
+    for (const slot of table.slots) {
+      if (slot.status === "available") continue;
+      // `span === 0` marks continuation cells of a multi-hour booking.
+      if (slot.span === 0) continue;
+      entries.push({
+        table_number: table.table_number,
+        hour: slot.hour,
+        slot,
+      });
+    }
+  }
+  return entries;
+}
+
+function groupAgendaByHour(entries: AgendaEntry[]): {
+  hour: number;
+  entries: AgendaEntry[];
+}[] {
+  const byHour = new Map<number, AgendaEntry[]>();
+  for (const entry of entries) {
+    const bucket = byHour.get(entry.hour) ?? [];
+    bucket.push(entry);
+    byHour.set(entry.hour, bucket);
+  }
+  return Array.from(byHour.entries())
+    .sort(([a], [b]) => a - b)
+    .map(([hour, list]) => ({
+      hour,
+      entries: list.slice().sort((a, b) => a.table_number - b.table_number),
+    }));
+}
+
+function countAgendaEntries(day: CalendarDay): {
+  member: number;
+  walkin: number;
+  blocked: number;
+} {
+  let member = 0;
+  let walkin = 0;
+  let blocked = 0;
+  for (const entry of collectAgendaEntries(day)) {
+    if (entry.slot.status === "booked_member") member += 1;
+    else if (entry.slot.status === "booked_walkin") walkin += 1;
+    else if (entry.slot.status === "blocked") blocked += 1;
+  }
+  return { member, walkin, blocked };
 }
 
 // ---------- Sub-components ----------
@@ -339,6 +537,29 @@ const STATUS_STYLES = {
     swatch: "bg-white/30",
   },
 } as const;
+
+/** Accent treatments used by the mobile agenda cards. */
+const AGENDA_ACCENTS: Record<
+  CalendarSlot["status"],
+  { border: string; badge: string }
+> = {
+  available: {
+    border: "border-l-4 border-l-white/10",
+    badge: "bg-white/10 text-white/60",
+  },
+  booked_member: {
+    border: "border-l-4 border-l-accent",
+    badge: "bg-accent/20 text-accent",
+  },
+  booked_walkin: {
+    border: "border-l-4 border-l-amber-400",
+    badge: "bg-amber-400/20 text-amber-200",
+  },
+  blocked: {
+    border: "border-l-4 border-l-white/40",
+    badge: "bg-white/15 text-white/70",
+  },
+};
 
 // Calendar labels are 24h in SGT — formatted directly for unambiguous
 // staff-facing display.
