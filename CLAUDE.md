@@ -166,6 +166,66 @@ stack from Session 15 reused on a schedule.
   route returns `{ sent: 0, mock: true }` without touching the data layer
   so local dev stays quiet.
 
+## Daily checklists & SOPs (Session 18)
+Staff-facing operational checklists. Manager/owner defines reusable templates
+(Opening, Closing, Weekly Deep Clean, …) and each day today's instances are
+materialised lazily from the active templates on first access. No cron — the
+first staff load of `/checklists` does the work.
+
+- **Schema:** migration 008 adds four tables:
+  - `checklist_templates` — reusable definitions (name, description, category,
+    is_active, sort_order).
+  - `checklist_template_items` — ordered items inside a template.
+  - `checklist_instances` — one per `(template_id, date)`, generated lazily.
+    The `UNIQUE(template_id, date)` constraint makes the lazy-create race-safe
+    — concurrent requests upsert with `onConflict: 'template_id,date',
+    ignoreDuplicates: true` and then re-fetch.
+  - `checklist_instance_items` — copied from the template item at creation
+    time (label + description). `template_item_id` is kept for traceability
+    but `ON DELETE SET NULL` so removing a template item doesn't break
+    historical instances.
+- **Items are copied, not referenced.** Editing a template tomorrow doesn't
+  rewrite yesterday's record — staff always see exactly what they were asked
+  to do on the day.
+- **RLS:** staff read everything and can INSERT/UPDATE instances + instance
+  items (so they can lazily create the day's checklists and tick boxes).
+  Manager/owner additionally have full CRUD on templates + template items.
+  Members have no access.
+- **Data layer:** `src/lib/data/checklists.ts` (dual-mode).
+  - `getChecklistsForDate(date)` does the lazy create and returns
+    `ChecklistInstanceWithItems[]` for the UI.
+  - `toggleChecklistItem(itemId, staffId)` flips one item. When the flip
+    completes the instance, stamps `completed_at`/`completed_by`; unchecking
+    on a completed instance clears those fields.
+  - `updateChecklistTemplateItems(templateId, items)` replaces ALL items for
+    a template in one call (deletes items missing from the payload, updates
+    existing rows by id, inserts new ones). Simpler than per-row CRUD for an
+    ordered list and matches the editor UI.
+  - `deleteChecklistTemplate` is a soft-delete (sets `is_active = false`) so
+    historical instances remain valid.
+- **Server actions:** `src/app/actions/checklists.ts`. Template + history
+  actions enforce manager/owner; instance read/toggle actions only require
+  staff. All revalidate `/checklists` (and relevant sub-paths) on success.
+- **UI routes:**
+  - `/checklists` — staff-facing daily view. Date picker can look back; past
+    dates are read-only. Items have an optional description that expands
+    inline.
+  - `/checklists/templates` + `/checklists/templates/new` +
+    `/checklists/templates/[id]` — manager/owner only. Simple up/down arrows
+    instead of drag-and-drop so the editor works on mobile without a dep.
+  - `/checklists/history` — manager/owner only. Date-range + template filter,
+    each row expands to show which items were checked by whom.
+- **Nav:** `ClipboardCheck` icon added to both `StaffMobileNav` (labelled
+  "Checks") and `StaffSidebar` (labelled "Checklists"). The sidebar grows a
+  new "Manager" section visible to manager/owner that links to Templates and
+  Checklist history.
+- **Mock mode:** `MOCK_CHECKLIST_TEMPLATES` + `MOCK_CHECKLIST_TEMPLATE_ITEMS`
+  seed three realistic templates (Opening 6 items, Closing 6 items, Weekly
+  Deep Clean 5 items). Instances and instance items are pushed into
+  `MOCK_CHECKLIST_INSTANCES` / `MOCK_CHECKLIST_INSTANCE_ITEMS` on first access
+  for a date. `__resetMockChecklistInstances()` is exported for tests; the
+  standard `resetMockData()` helper also clears them between runs.
+
 ### Environment variables
 
 | Name | Purpose | Required for |

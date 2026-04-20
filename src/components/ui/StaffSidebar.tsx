@@ -5,6 +5,9 @@ import { usePathname } from "next/navigation";
 import {
   LayoutGrid,
   Calendar,
+  ClipboardCheck,
+  History,
+  ListChecks,
   UserPlus,
   Users,
   Settings,
@@ -20,8 +23,14 @@ type SidebarLink = { href: string; label: string; icon: LucideIcon };
 const staffLinks: SidebarLink[] = [
   { href: "/floor", label: "Floorplan", icon: LayoutGrid },
   { href: "/calendar", label: "Calendar", icon: Calendar },
+  { href: "/checklists", label: "Checklists", icon: ClipboardCheck },
   { href: "/walk-in", label: "Walk-in", icon: UserPlus },
   { href: "/members", label: "Members", icon: Users },
+];
+
+const managerLinks: SidebarLink[] = [
+  { href: "/checklists/templates", label: "Templates", icon: ListChecks },
+  { href: "/checklists/history", label: "Checklist history", icon: History },
 ];
 
 const ownerLinks: SidebarLink[] = [
@@ -71,6 +80,15 @@ export function StaffSidebar() {
         Operations
       </div>
       <ul className="mb-6 space-y-1">{staffLinks.map(renderLink)}</ul>
+
+      {(role === "manager" || role === "owner") && (
+        <>
+          <div className="mb-2 px-3 text-xs uppercase tracking-wider text-white/40">
+            Manager
+          </div>
+          <ul className="mb-6 space-y-1">{managerLinks.map(renderLink)}</ul>
+        </>
+      )}
 
       {role === "owner" && (
         <>

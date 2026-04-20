@@ -2,11 +2,19 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, Calendar, UserPlus, Users, type LucideIcon } from "lucide-react";
+import {
+  LayoutGrid,
+  Calendar,
+  ClipboardCheck,
+  UserPlus,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 
 const links: Array<{ href: string; label: string; icon: LucideIcon }> = [
   { href: "/floor", label: "Floor", icon: LayoutGrid },
   { href: "/calendar", label: "Calendar", icon: Calendar },
+  { href: "/checklists", label: "Checks", icon: ClipboardCheck },
   { href: "/walk-in", label: "Walk-in", icon: UserPlus },
   { href: "/members", label: "Members", icon: Users },
 ];

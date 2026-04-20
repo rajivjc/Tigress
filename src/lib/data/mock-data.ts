@@ -15,6 +15,12 @@ import type {
   Table,
   WalkInGuest,
 } from "@/lib/types";
+import type {
+  ChecklistInstance,
+  ChecklistInstanceItem,
+  ChecklistTemplate,
+  ChecklistTemplateItem,
+} from "@/lib/types/checklists";
 
 const isoNow = () => new Date().toISOString();
 const fixedCreatedAt = "2025-01-01T00:00:00.000Z";
@@ -438,3 +444,205 @@ export function findMockTierById(id: string | null): MembershipTier | null {
 // Touch isoNow so unused-import/unused-var lint doesn't fire if someone later
 // removes the only call site.
 export const MOCK_DATA_FETCHED_AT = isoNow;
+
+// =============================================================================
+// Checklists (Session 18)
+// =============================================================================
+// Seeded checklist templates used when Supabase is not configured. Daily
+// instances are created lazily on first access so this file only holds the
+// template definitions.
+
+const MOCK_MANAGER_STAFF_ID = "mock-staff-row-2";
+
+export const MOCK_CHECKLIST_TEMPLATES: ChecklistTemplate[] = [
+  {
+    id: "checklist-template-opening",
+    name: "Opening Procedures",
+    description: "Run through every morning before the venue opens.",
+    category: "daily",
+    is_active: true,
+    sort_order: 1,
+    created_by: MOCK_MANAGER_STAFF_ID,
+    created_at: fixedCreatedAt,
+    updated_at: fixedCreatedAt,
+  },
+  {
+    id: "checklist-template-closing",
+    name: "Closing Procedures",
+    description: "Final lockup checks before leaving for the night.",
+    category: "daily",
+    is_active: true,
+    sort_order: 2,
+    created_by: MOCK_MANAGER_STAFF_ID,
+    created_at: fixedCreatedAt,
+    updated_at: fixedCreatedAt,
+  },
+  {
+    id: "checklist-template-weekly-clean",
+    name: "Weekly Deep Clean",
+    description: "Thorough clean of tables, cues, and common areas.",
+    category: "weekly",
+    is_active: true,
+    sort_order: 3,
+    created_by: MOCK_MANAGER_STAFF_ID,
+    created_at: fixedCreatedAt,
+    updated_at: fixedCreatedAt,
+  },
+];
+
+export const MOCK_CHECKLIST_TEMPLATE_ITEMS: ChecklistTemplateItem[] = [
+  // Opening
+  {
+    id: "tmpl-item-open-1",
+    template_id: "checklist-template-opening",
+    label: "Turn on all table lights",
+    description: "Check each fixture — report flickering bulbs to manager.",
+    sort_order: 1,
+    created_at: fixedCreatedAt,
+  },
+  {
+    id: "tmpl-item-open-2",
+    template_id: "checklist-template-opening",
+    label: "Unlock front door and disarm alarm",
+    description: null,
+    sort_order: 2,
+    created_at: fixedCreatedAt,
+  },
+  {
+    id: "tmpl-item-open-3",
+    template_id: "checklist-template-opening",
+    label: "Power on POS and verify Qashier sync",
+    description: null,
+    sort_order: 3,
+    created_at: fixedCreatedAt,
+  },
+  {
+    id: "tmpl-item-open-4",
+    template_id: "checklist-template-opening",
+    label: "Brush and level all 7 tables",
+    description: "Use felt brush, check cushions for wear.",
+    sort_order: 4,
+    created_at: fixedCreatedAt,
+  },
+  {
+    id: "tmpl-item-open-5",
+    template_id: "checklist-template-opening",
+    label: "Stock cue rack (minimum 20 cues)",
+    description: null,
+    sort_order: 5,
+    created_at: fixedCreatedAt,
+  },
+  {
+    id: "tmpl-item-open-6",
+    template_id: "checklist-template-opening",
+    label: "Check bathrooms are clean and stocked",
+    description: null,
+    sort_order: 6,
+    created_at: fixedCreatedAt,
+  },
+
+  // Closing
+  {
+    id: "tmpl-item-close-1",
+    template_id: "checklist-template-closing",
+    label: "Clear and wipe down all tables",
+    description: null,
+    sort_order: 1,
+    created_at: fixedCreatedAt,
+  },
+  {
+    id: "tmpl-item-close-2",
+    template_id: "checklist-template-closing",
+    label: "Rack and count cues",
+    description: null,
+    sort_order: 2,
+    created_at: fixedCreatedAt,
+  },
+  {
+    id: "tmpl-item-close-3",
+    template_id: "checklist-template-closing",
+    label: "Empty bins and replace liners",
+    description: null,
+    sort_order: 3,
+    created_at: fixedCreatedAt,
+  },
+  {
+    id: "tmpl-item-close-4",
+    template_id: "checklist-template-closing",
+    label: "Cash up POS and reconcile Qashier",
+    description: "Flag variance > $5 to manager.",
+    sort_order: 4,
+    created_at: fixedCreatedAt,
+  },
+  {
+    id: "tmpl-item-close-5",
+    template_id: "checklist-template-closing",
+    label: "Turn off table lights and overhead fans",
+    description: null,
+    sort_order: 5,
+    created_at: fixedCreatedAt,
+  },
+  {
+    id: "tmpl-item-close-6",
+    template_id: "checklist-template-closing",
+    label: "Arm alarm and lock front door",
+    description: null,
+    sort_order: 6,
+    created_at: fixedCreatedAt,
+  },
+
+  // Weekly deep clean
+  {
+    id: "tmpl-item-weekly-1",
+    template_id: "checklist-template-weekly-clean",
+    label: "Vacuum all table rails",
+    description: null,
+    sort_order: 1,
+    created_at: fixedCreatedAt,
+  },
+  {
+    id: "tmpl-item-weekly-2",
+    template_id: "checklist-template-weekly-clean",
+    label: "Re-tip worn cues (check chalk wear pattern)",
+    description: null,
+    sort_order: 2,
+    created_at: fixedCreatedAt,
+  },
+  {
+    id: "tmpl-item-weekly-3",
+    template_id: "checklist-template-weekly-clean",
+    label: "Deep-clean bathrooms",
+    description: null,
+    sort_order: 3,
+    created_at: fixedCreatedAt,
+  },
+  {
+    id: "tmpl-item-weekly-4",
+    template_id: "checklist-template-weekly-clean",
+    label: "Wipe down light fixtures",
+    description: null,
+    sort_order: 4,
+    created_at: fixedCreatedAt,
+  },
+  {
+    id: "tmpl-item-weekly-5",
+    template_id: "checklist-template-weekly-clean",
+    label: "Mop entire floor area",
+    description: null,
+    sort_order: 5,
+    created_at: fixedCreatedAt,
+  },
+];
+
+/**
+ * In-memory checklist instances + items. New rows are pushed by
+ * `getChecklistsForDate` when it materialises a template for a given date.
+ */
+export const MOCK_CHECKLIST_INSTANCES: ChecklistInstance[] = [];
+export const MOCK_CHECKLIST_INSTANCE_ITEMS: ChecklistInstanceItem[] = [];
+
+/** Internal test hook — reset lazy instances between tests. */
+export function __resetMockChecklistInstances(): void {
+  MOCK_CHECKLIST_INSTANCES.length = 0;
+  MOCK_CHECKLIST_INSTANCE_ITEMS.length = 0;
+}
