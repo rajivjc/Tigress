@@ -10,6 +10,7 @@ import {
   History,
   ListChecks,
   MessageCircle,
+  Trophy,
   UserPlus,
   Users,
   Settings,
@@ -38,6 +39,7 @@ const managerLinks: SidebarLink[] = [
 ];
 
 const ownerLinks: SidebarLink[] = [
+  { href: "/competitions", label: "Competitions", icon: Trophy },
   { href: "/settings", label: "Settings", icon: Settings },
   { href: "/rates", label: "Rates", icon: DollarSign },
 ];
