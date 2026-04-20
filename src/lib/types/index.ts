@@ -119,6 +119,7 @@ export interface Booking {
   booking_type: BookingType;
   created_by: string | null;
   notes: string | null;
+  no_show: boolean;
   created_at: string;
   updated_at: string;
 }

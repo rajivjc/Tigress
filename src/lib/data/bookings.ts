@@ -197,6 +197,187 @@ export async function completeExpiredBookings(): Promise<number> {
   return (data as { id: string }[] | null)?.length ?? 0;
 }
 
+// ---------- No-show ----------
+
+/**
+ * Mark a completed booking as a no-show. The "completed-only" rule is
+ * enforced here (not via a CHECK constraint, because that would conflict
+ * with the auto-complete sweep's UPDATE ordering). Caller is also expected
+ * to enforce the 48-hour staleness guard at the action layer.
+ */
+export async function markNoShow(
+  bookingId: string,
+  staffId: string
+): Promise<{ success: boolean; error?: string }> {
+  if (!isSupabaseConfigured()) {
+    const row = MOCK_BOOKINGS.find((b) => b.id === bookingId);
+    if (!row) return { success: false, error: "Booking not found" };
+    if (row.status !== "completed") {
+      return {
+        success: false,
+        error: "Only completed bookings can be marked as no-show",
+      };
+    }
+    if (row.no_show) return { success: true };
+    row.no_show = true;
+    row.updated_at = new Date().toISOString();
+    return { success: true };
+  }
+
+  const supabase = createClient();
+  const { data: existing, error: fetchError } = await supabase
+    .from("bookings")
+    .select("id, status, no_show, member_id")
+    .eq("id", bookingId)
+    .maybeSingle();
+  if (fetchError) return { success: false, error: fetchError.message };
+  if (!existing) return { success: false, error: "Booking not found" };
+
+  const row = existing as Pick<Booking, "id" | "status" | "no_show" | "member_id">;
+  if (row.status !== "completed") {
+    return {
+      success: false,
+      error: "Only completed bookings can be marked as no-show",
+    };
+  }
+  if (row.no_show) return { success: true };
+
+  const { error: updateError } = await supabase
+    .from("bookings")
+    .update({ no_show: true })
+    .eq("id", bookingId);
+  if (updateError) return { success: false, error: updateError.message };
+
+  await writeNoShowAuditLog("no_show_marked", row.id, row.member_id, staffId);
+  return { success: true };
+}
+
+/** Reverse a previous mark — also completed-only. */
+export async function unmarkNoShow(
+  bookingId: string,
+  staffId: string
+): Promise<{ success: boolean; error?: string }> {
+  if (!isSupabaseConfigured()) {
+    const row = MOCK_BOOKINGS.find((b) => b.id === bookingId);
+    if (!row) return { success: false, error: "Booking not found" };
+    if (row.status !== "completed") {
+      return {
+        success: false,
+        error: "Only completed bookings can be unmarked",
+      };
+    }
+    if (!row.no_show) {
+      return { success: false, error: "Booking is not marked as no-show" };
+    }
+    row.no_show = false;
+    row.updated_at = new Date().toISOString();
+    return { success: true };
+  }
+
+  const supabase = createClient();
+  const { data: existing, error: fetchError } = await supabase
+    .from("bookings")
+    .select("id, status, no_show, member_id")
+    .eq("id", bookingId)
+    .maybeSingle();
+  if (fetchError) return { success: false, error: fetchError.message };
+  if (!existing) return { success: false, error: "Booking not found" };
+
+  const row = existing as Pick<Booking, "id" | "status" | "no_show" | "member_id">;
+  if (row.status !== "completed") {
+    return {
+      success: false,
+      error: "Only completed bookings can be unmarked",
+    };
+  }
+  if (!row.no_show) {
+    return { success: false, error: "Booking is not marked as no-show" };
+  }
+
+  const { error: updateError } = await supabase
+    .from("bookings")
+    .update({ no_show: false })
+    .eq("id", bookingId);
+  if (updateError) return { success: false, error: updateError.message };
+
+  await writeNoShowAuditLog("no_show_unmarked", row.id, row.member_id, staffId);
+  return { success: true };
+}
+
+/** Total count of no-show bookings for a member. */
+export async function getNoShowCountForMember(
+  memberId: string
+): Promise<number> {
+  if (!isSupabaseConfigured()) {
+    return MOCK_BOOKINGS.filter(
+      (b) => b.member_id === memberId && b.no_show === true
+    ).length;
+  }
+
+  const supabase = createClient();
+  const { count } = await supabase
+    .from("bookings")
+    .select("id", { count: "exact", head: true })
+    .eq("member_id", memberId)
+    .eq("no_show", true);
+  return count ?? 0;
+}
+
+/**
+ * Last 50 no-show bookings for the member, newest first. Bounded so the
+ * query stays cheap even for members with a long history.
+ */
+export async function getNoShowHistoryForMember(
+  memberId: string
+): Promise<Booking[]> {
+  if (!isSupabaseConfigured()) {
+    return MOCK_BOOKINGS.filter(
+      (b) => b.member_id === memberId && b.no_show === true
+    )
+      .slice()
+      .sort(compareDesc)
+      .slice(0, 50);
+  }
+
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("bookings")
+    .select("*")
+    .eq("member_id", memberId)
+    .eq("no_show", true)
+    .order("starts_at", { ascending: false })
+    .limit(50);
+  return (data as Booking[] | null) ?? [];
+}
+
+async function writeNoShowAuditLog(
+  action: "no_show_marked" | "no_show_unmarked",
+  bookingId: string,
+  memberId: string | null,
+  staffId: string
+): Promise<void> {
+  // Audit logging never blocks the caller. The action layer already returned
+  // success at this point, so swallow any errors quietly.
+  try {
+    const supabase = createClient();
+    await supabase.from("audit_log").insert({
+      actor_id: staffId,
+      action,
+      entity_type: "booking",
+      entity_id: bookingId,
+      metadata: {
+        booking_id: bookingId,
+        member_id: memberId,
+        [action === "no_show_marked"
+          ? "marked_by_staff_id"
+          : "unmarked_by_staff_id"]: staffId,
+      },
+    });
+  } catch {
+    /* best effort */
+  }
+}
+
 // ---------- Cancel a booking ----------
 
 export async function cancelBooking(
@@ -578,6 +759,7 @@ async function createBookingMock(
     booking_type: "member",
     created_by: input.member_id,
     notes: null,
+    no_show: false,
     created_at: nowIso,
     updated_at: nowIso,
   };
@@ -682,6 +864,7 @@ export async function createWalkIn(
       booking_type: "walk_in",
       created_by: input.created_by,
       notes: null,
+      no_show: false,
       created_at: nowIso,
       updated_at: nowIso,
     };

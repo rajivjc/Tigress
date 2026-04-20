@@ -14,13 +14,25 @@
 //   `?date=YYYY-MM-DD` param.
 // =============================================================================
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { CalendarDays } from "lucide-react";
 import { addDaysSGT, todaySGT } from "@/lib/timezone";
 import { EmptyState } from "@/components/ui/EmptyState";
+import {
+  markNoShowAction,
+  unmarkNoShowAction,
+} from "@/app/actions/no-show";
 import type { CalendarDay, CalendarSlot } from "@/lib/data/calendar";
+
+const NO_SHOW_WINDOW_MS = 48 * 60 * 60 * 1000;
+
+function isWithinNoShowWindow(endsAt?: string): boolean {
+  if (!endsAt) return false;
+  const ageMs = Date.now() - Date.parse(endsAt);
+  return ageMs >= 0 && ageMs <= NO_SHOW_WINDOW_MS;
+}
 
 export interface CalendarDayViewProps {
   day: CalendarDay;
@@ -222,41 +234,110 @@ function AgendaCard({ entry }: { entry: AgendaEntry }) {
   const durationLabel = `${slot.span ?? 1}h`;
   const label = slot.label ?? style.label;
 
-  const body = (
+  return (
     <div
-      className={`flex items-center gap-3 rounded-xl border border-white/10 bg-surface-1 p-3 ${accent.border}`}
+      className={`flex flex-col gap-2 rounded-xl border border-white/10 bg-surface-1 p-3 ${accent.border}`}
     >
-      <span
-        className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg text-xs font-bold ${accent.badge}`}
-      >
-        T{table_number}
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-white">{label}</p>
-        <p className="text-[11px] uppercase tracking-wider text-white/50">
-          {style.label} · {durationLabel}
-        </p>
-      </div>
-      {slot.booking_id && (
-        <span aria-hidden="true" className="text-white/30">
-          ›
+      <div className="flex items-center gap-3">
+        <span
+          className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg text-xs font-bold ${accent.badge}`}
+        >
+          T{table_number}
         </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            {slot.booking_id ? (
+              <Link
+                href={`/bookings/${slot.booking_id}`}
+                className="truncate text-sm font-semibold text-white hover:underline"
+              >
+                {label}
+              </Link>
+            ) : (
+              <p className="truncate text-sm font-semibold text-white">
+                {label}
+              </p>
+            )}
+            {slot.is_no_show && <NoShowBadge />}
+          </div>
+          <p className="text-[11px] uppercase tracking-wider text-white/50">
+            {style.label} · {durationLabel}
+            {slot.is_completed ? " · completed" : ""}
+          </p>
+        </div>
+      </div>
+      {slot.is_completed && slot.booking_id && (
+        <NoShowControls slot={slot} />
       )}
     </div>
   );
+}
 
-  if (slot.booking_id) {
-    return (
-      <Link
-        href={`/bookings/${slot.booking_id}`}
-        className="block transition-colors hover:bg-white/5"
-      >
-        {body}
-      </Link>
-    );
-  }
+function NoShowBadge() {
+  return (
+    <span className="rounded-full bg-rose-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-rose-200">
+      No-show
+    </span>
+  );
+}
 
-  return body;
+function NoShowControls({ slot }: { slot: CalendarSlot }) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const canMark = isWithinNoShowWindow(slot.ends_at);
+
+  if (!slot.booking_id) return null;
+  if (!canMark) return null;
+
+  const onMark = () => {
+    setError(null);
+    startTransition(async () => {
+      const res = await markNoShowAction(slot.booking_id!);
+      if (!res.success) {
+        setError(res.error ?? "Failed to mark no-show");
+        return;
+      }
+      router.refresh();
+    });
+  };
+
+  const onUndo = () => {
+    setError(null);
+    startTransition(async () => {
+      const res = await unmarkNoShowAction(slot.booking_id!);
+      if (!res.success) {
+        setError(res.error ?? "Failed to undo");
+        return;
+      }
+      router.refresh();
+    });
+  };
+
+  return (
+    <div className="flex items-center justify-end gap-3 border-t border-white/10 pt-2 text-[11px]">
+      {error && <span className="mr-auto text-rose-300">{error}</span>}
+      {slot.is_no_show ? (
+        <button
+          type="button"
+          onClick={onUndo}
+          disabled={isPending}
+          className="text-white/60 hover:text-white disabled:opacity-50"
+        >
+          Undo
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={onMark}
+          disabled={isPending}
+          className="text-rose-300 hover:text-rose-200 disabled:opacity-50"
+        >
+          Mark no-show
+        </button>
+      )}
+    </div>
+  );
 }
 
 // ---------- Agenda helpers ----------
@@ -367,12 +448,15 @@ function SlotCell({
 }) {
   const span = slot.span ?? 1;
   const styles = STATUS_STYLES[slot.status];
+  const noShowAccent = slot.is_no_show
+    ? " ring-1 ring-rose-400/60"
+    : "";
   return (
     <button
       type="button"
       onClick={onClick}
       title={slot.label}
-      className={`flex flex-col items-start justify-start overflow-hidden rounded-md border px-1.5 py-1 text-left text-[10px] leading-tight transition-colors ${styles.classes}`}
+      className={`flex flex-col items-start justify-start overflow-hidden rounded-md border px-1.5 py-1 text-left text-[10px] leading-tight transition-colors ${styles.classes}${noShowAccent}`}
       style={{
         gridRow: `${row} / span ${span}`,
         gridColumn: col,
@@ -384,7 +468,9 @@ function SlotCell({
             {slot.label ?? "—"}
           </span>
           <span className="mt-auto block text-[9px] uppercase tracking-wider opacity-70">
-            {STATUS_STYLES[slot.status].badge}
+            {slot.is_no_show
+              ? "no-show"
+              : STATUS_STYLES[slot.status].badge}
           </span>
         </>
       )}
@@ -477,12 +563,20 @@ function DetailPanel({
           <p className="text-[11px] uppercase tracking-wider text-white/40">
             Table {selected.table_number} · {formatHourLabel(selected.hour)}
           </p>
-          <p className="mt-1 text-base font-semibold text-white">
-            {slot.label ?? STATUS_STYLES[slot.status].label}
-          </p>
+          <div className="mt-1 flex items-center gap-2">
+            <p className="text-base font-semibold text-white">
+              {slot.label ?? STATUS_STYLES[slot.status].label}
+            </p>
+            {slot.is_no_show && <NoShowBadge />}
+          </div>
           {slot.span && slot.span > 1 && (
             <p className="text-xs text-white/60">
               {slot.span} hour session
+            </p>
+          )}
+          {slot.is_completed && (
+            <p className="text-[11px] uppercase tracking-wider text-white/40">
+              Completed
             </p>
           )}
           {slot.booking_id && (
@@ -492,6 +586,11 @@ function DetailPanel({
             >
               View booking →
             </a>
+          )}
+          {slot.is_completed && slot.booking_id && (
+            <div className="mt-3">
+              <NoShowControls slot={slot} />
+            </div>
           )}
         </div>
         <button

@@ -78,3 +78,38 @@ Web Push using the Push API + VAPID. No third-party push services, no `next-pwa`
   - Booking reminders are deliberately deferred — they need a cron job, which is out of scope for Phase 2.
 - **Client component:** `src/components/pwa/PushSubscription.tsx` (mounted on `/profile`). Detects iOS/standalone/permission state via a small state machine and only shows the toggle when the browser can actually subscribe. Server actions live in `src/app/actions/push.ts` (`subscribePush`, `unsubscribePush`, `getPushStatus`).
 - **iOS constraint:** Web Push only works on iOS 16.4+ AND only in standalone (home-screen-installed) mode. The toggle shows "Install Tigress to your home screen" when iOS Safari isn't installed; "Notifications require iOS 16.4+" when standalone but PushManager is missing.
+
+## No-show tracking (Session 16)
+Staff/manager/owner can flag completed bookings as no-shows. Purely
+informational — there are NO automatic consequences (no credit penalties, no
+booking blocks). Policy decisions live in a future session.
+
+- **Schema:** `bookings.no_show boolean NOT NULL DEFAULT false` (migration 006)
+  plus a partial index `(member_id, no_show) WHERE no_show = true` so
+  per-member counts stay cheap. The "completed-only" rule is enforced in the
+  application layer (`markNoShow` / `unmarkNoShow`) — a CHECK against `status`
+  would fight the auto-complete sweep's UPDATE ordering.
+- **RLS:** the existing `bookings update: own or staff` policy already covers
+  staff writes to `no_show`, so migration 006 adds no new policies.
+- **Data layer:** `markNoShow` / `unmarkNoShow` / `getNoShowCountForMember` /
+  `getNoShowHistoryForMember` in `src/lib/data/bookings.ts`. History is
+  bounded to the most-recent 50 rows. Audit log entries (`no_show_marked` /
+  `no_show_unmarked`, entity_type `booking`) are written best-effort and
+  never block the caller.
+- **Server actions:** `src/app/actions/no-show.ts`. `markNoShowAction` /
+  `unmarkNoShowAction` enforce a **48-hour window** (booking must have ended
+  in the last 48h) so old records can't be silently rewritten.
+  `getNoShowStatsAction` returns `{ count, recentNoShows }` for staff UI.
+- **Calendar surfaces:** the day-view fetch now includes `completed` bookings
+  (not just `confirmed`) so the agenda can show the No-Show badge, the
+  "Mark no-show" / "Undo" controls, and the desktop slot's rose ring.
+  The week-view cell carries a `no_show_count` and renders a small rose dot
+  in the heat-map. `CalendarSlot.is_completed` / `is_no_show` / `ends_at` /
+  `member_id` flow from the data layer to the renderer.
+- **Member detail page:** new "No-shows" section under "Recent history"
+  shows the count badge and a list of flagged bookings (table + date).
+  The existing past-bookings list also gains a small No-Show pill next to
+  the status label so staff can spot them in context.
+- **Out of scope this session:** no changes to the Floor view (real-time
+  operational; historical no-shows would clutter it) and no changes to
+  booking creation, cancellation, or credit flows.

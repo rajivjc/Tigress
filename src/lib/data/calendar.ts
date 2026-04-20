@@ -41,6 +41,14 @@ export interface CalendarSlot {
   span?: number;
   /** True for the first slot of a multi-hour booking/block. */
   is_start?: boolean;
+  /** True when the booking has been auto-completed (ended in the past). */
+  is_completed?: boolean;
+  /** True when the booking has been flagged as a no-show by staff. */
+  is_no_show?: boolean;
+  /** End time (ISO) — used by the day view to apply the 48h mark window. */
+  ends_at?: string;
+  /** Member id on the booking — used by the member detail revalidation path. */
+  member_id?: string | null;
 }
 
 export interface CalendarTable {
@@ -107,6 +115,8 @@ export interface CalendarWeekCell {
   booking_count: number;
   /** Number of blocks on this table on this date. */
   block_count: number;
+  /** Number of completed bookings on this table marked as a no-show. */
+  no_show_count: number;
 }
 
 export interface CalendarWeek {
@@ -148,10 +158,16 @@ export async function getCalendarWeek(
         startOfDaySGT(addDaysSGT(date, 1)).getTime()
       ).toISOString();
 
-      const booking_count = bookings.filter(
+      const tableBookings = bookings.filter(
         (b) =>
           b.table_id === table.id &&
           rangesOverlap(b.starts_at, b.ends_at, dayStart, dayEnd)
+      );
+      const booking_count = tableBookings.filter(
+        (b) => b.status === "confirmed"
+      ).length;
+      const no_show_count = tableBookings.filter(
+        (b) => b.status === "completed" && b.no_show === true
       ).length;
       const block_count = blocks.filter(
         (b) =>
@@ -165,6 +181,7 @@ export async function getCalendarWeek(
         table_number: table.table_number,
         booking_count,
         block_count,
+        no_show_count,
       };
     });
   });
@@ -222,6 +239,10 @@ function buildSlotsForTable(
         status: isWalkIn ? "booked_walkin" : "booked_member",
         booking_id: booking.id,
         label: pickLabel(booking),
+        is_completed: booking.status === "completed",
+        is_no_show: booking.no_show === true,
+        ends_at: booking.ends_at,
+        member_id: booking.member_id,
       });
       continue;
     }
@@ -309,7 +330,7 @@ async function fetchDayData(
     }));
     const bookings: BookingWithMember[] = MOCK_BOOKINGS.filter(
       (b) =>
-        b.status === "confirmed" &&
+        (b.status === "confirmed" || b.status === "completed") &&
         rangesOverlap(b.starts_at, b.ends_at, dayStartIso, dayEndIso)
     ).map((b) => {
       const guest = MOCK_WALK_IN_GUESTS.find((g) => g.booking_id === b.id);
@@ -333,7 +354,7 @@ async function fetchDayData(
       .select(
         "*, members!bookings_member_id_fkey(id, full_name), walk_in_guests(guest_name)"
       )
-      .eq("status", "confirmed")
+      .in("status", ["confirmed", "completed"])
       .lt("starts_at", dayEndIso)
       .gt("ends_at", dayStartIso),
     supabase
