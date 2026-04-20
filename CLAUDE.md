@@ -120,7 +120,7 @@ booking blocks). Policy decisions live in a future session.
   booking creation, cancellation, or credit flows.
 
 ## Booking reminders (Session 17)
-A Vercel Cron job delivers a Web Push reminder ~1 hour before each member
+A scheduled job delivers a Web Push reminder ~1 hour before each member
 session starts. No in-app notifications, no SMS, no email — this is the push
 stack from Session 15 reused on a schedule.
 
@@ -128,10 +128,13 @@ stack from Session 15 reused on a schedule.
   NULL means no reminder has been sent; the cron stamps `now()` after a send
   attempt. No new index — the cron query filters on `starts_at` first
   (covered by migration 004's composite indexes) before checking the column.
-- **Cron config:** `vercel.json` declares a single cron at
-  `/api/cron/booking-reminders` on the `*/15 * * * *` schedule (every 15
-  minutes). Vercel Cron sends `GET` with
-  `Authorization: Bearer <CRON_SECRET>`.
+- **Scheduler:** `.github/workflows/booking-reminders.yml` runs every 15
+  minutes and `curl`s the endpoint with
+  `Authorization: Bearer $CRON_SECRET`. Originally this used Vercel Cron
+  (`vercel.json` `crons` block) but Vercel Hobby caps cron frequency at
+  1/day, so we moved the trigger to GitHub Actions. The route itself is
+  unchanged. If the deployment ever moves to Vercel Pro, add the `crons`
+  block back to `vercel.json` and delete the workflow.
 - **Route:** `src/app/api/cron/booking-reminders/route.ts`. Verifies the
   bearer token first (401 otherwise), short-circuits with `{ sent: 0 }` in
   mock mode, otherwise computes the UTC window `[now+45min, now+75min]` and
@@ -145,12 +148,19 @@ stack from Session 15 reused on a schedule.
   blocks, cancelled/completed bookings, and already-reminded bookings are
   excluded by construction.
 - **Idempotency:** `reminder_sent_at` is the idempotency key — a duplicate
-  cron run in the same window cannot send a second reminder. The push
-  payload also carries `tag: reminder-<id>` so the device collapses any
-  residual duplicate notification.
-- **Env var:** `CRON_SECRET` — any random string (e.g. `openssl rand -hex
-  32`). The route 401s when the variable is unset or when the header doesn't
-  match; Vercel Cron automatically includes it on scheduled invocations.
+  run in the same window cannot send a second reminder. GitHub-Actions
+  schedule drift (can be several minutes under load) is absorbed by the
+  30-minute-wide window. The push payload also carries
+  `tag: reminder-<id>` so the device collapses any residual duplicate
+  notification.
+- **Required secrets:**
+  - **Vercel env var** `CRON_SECRET` — any random string (e.g.
+    `openssl rand -hex 32`). The route 401s when it's unset or the header
+    doesn't match.
+  - **GitHub Actions secrets** `CRON_SECRET` (same value as the Vercel env
+    var) and `CRON_TARGET_URL` (deployment origin, e.g.
+    `https://tigress.vercel.app`). Without both, the workflow fails fast
+    with an error.
 - **Mock mode:** `getBookingsNeedingReminder` filters the in-memory
   `MOCK_BOOKINGS` array, `markReminderSent` mutates the row, and the cron
   route returns `{ sent: 0, mock: true }` without touching the data layer
@@ -162,4 +172,4 @@ stack from Session 15 reused on a schedule.
 |------|---------|--------------|
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | VAPID public key, exposed to browser | Push |
 | `VAPID_PRIVATE_KEY` | VAPID private key, server only | Push |
-| `CRON_SECRET` | Vercel Cron authentication bearer token | Booking reminders |
+| `CRON_SECRET` | Bearer token verified by the reminders route | Booking reminders |
