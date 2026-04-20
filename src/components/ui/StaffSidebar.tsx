@@ -9,6 +9,7 @@ import {
   BookOpen,
   History,
   ListChecks,
+  MessageCircle,
   UserPlus,
   Users,
   Settings,
@@ -26,6 +27,7 @@ const staffLinks: SidebarLink[] = [
   { href: "/calendar", label: "Calendar", icon: Calendar },
   { href: "/checklists", label: "Checklists", icon: ClipboardCheck },
   { href: "/recipes", label: "Recipes", icon: BookOpen },
+  { href: "/feed", label: "Feed", icon: MessageCircle },
   { href: "/walk-in", label: "Walk-in", icon: UserPlus },
   { href: "/members", label: "Members", icon: Users },
 ];

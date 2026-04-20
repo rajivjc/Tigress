@@ -7,6 +7,7 @@ import {
   Calendar,
   ClipboardCheck,
   BookOpen,
+  MessageCircle,
   UserPlus,
   Users,
   type LucideIcon,
@@ -17,6 +18,7 @@ const links: Array<{ href: string; label: string; icon: LucideIcon }> = [
   { href: "/calendar", label: "Calendar", icon: Calendar },
   { href: "/checklists", label: "Checks", icon: ClipboardCheck },
   { href: "/recipes", label: "Recipes", icon: BookOpen },
+  { href: "/feed", label: "Feed", icon: MessageCircle },
   { href: "/walk-in", label: "Walk-in", icon: UserPlus },
   { href: "/members", label: "Members", icon: Users },
 ];

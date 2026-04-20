@@ -26,6 +26,7 @@ import type {
   RecipeIngredient,
   RecipeStep,
 } from "@/lib/types/recipes";
+import type { PostLikeRow, PostRow } from "@/lib/types/posts";
 
 const isoNow = () => new Date().toISOString();
 const fixedCreatedAt = "2025-01-01T00:00:00.000Z";
@@ -984,5 +985,349 @@ export const MOCK_RECIPE_STEPS: RecipeStep[] = [
     step_number: 2,
     instruction:
       "Pull a double espresso directly on top of the water to preserve the crema.",
+  },
+];
+
+// =============================================================================
+// Social feed (Session 20)
+// =============================================================================
+// Seeded posts spanning ~2 weeks so the feed has enough content to exercise
+// scrolling, pagination, author variety, and the liked-by-current-user state
+// for the primary mock member. All timestamps are computed relative to "now"
+// at module load.
+//
+// Author id conventions match the accounts in mock-users.ts:
+//   mock-member-row-1 / Mona   — primary member
+//   mock-member-row-2 / Alex
+//   mock-member-row-3 / Priya
+//   mock-member-row-4 / Jordan
+//   mock-staff-row-1  / Sam    — staff
+//   mock-staff-row-2  / Maya   — manager
+//   mock-staff-row-3  / Olive  — owner
+
+function hoursAgoIso(hours: number): string {
+  return new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+}
+
+function daysAgoIso(days: number): string {
+  return hoursAgoIso(days * 24);
+}
+
+export const MOCK_POSTS: PostRow[] = [
+  {
+    id: "post-seed-1",
+    author_member_id: null,
+    author_staff_id: "mock-staff-row-2",
+    system_generated: false,
+    body: "Pool table 3 felt replaced this morning. Back in action.",
+    media_type: "none",
+    media_url: null,
+    created_at: hoursAgoIso(2),
+    deleted_at: null,
+    deleted_by_member_id: null,
+    deleted_by_staff_id: null,
+  },
+  {
+    id: "post-seed-2",
+    author_member_id: "mock-member-row-2",
+    author_staff_id: null,
+    system_generated: false,
+    body: "Anyone down for doubles Friday night? 🎱",
+    media_type: "none",
+    media_url: null,
+    created_at: daysAgoIso(1),
+    deleted_at: null,
+    deleted_by_member_id: null,
+    deleted_by_staff_id: null,
+  },
+  {
+    id: "post-seed-3",
+    author_member_id: "mock-member-row-3",
+    author_staff_id: null,
+    system_generated: false,
+    body: "Ronnie O'Sullivan's 147 from last week, just incredible.",
+    media_type: "youtube",
+    // Public snooker highlight video id (Ronnie 147). If this ever 404s it's
+    // purely cosmetic in mock mode — the embed will show YouTube's fallback.
+    media_url: "D1LKCwMcXpA",
+    created_at: daysAgoIso(2),
+    deleted_at: null,
+    deleted_by_member_id: null,
+    deleted_by_staff_id: null,
+  },
+  {
+    id: "post-seed-4",
+    author_member_id: null,
+    author_staff_id: "mock-staff-row-1",
+    system_generated: false,
+    body: "Reminder: kitchen closes at 10pm on Sundays now.",
+    media_type: "none",
+    media_url: null,
+    created_at: daysAgoIso(3),
+    deleted_at: null,
+    deleted_by_member_id: null,
+    deleted_by_staff_id: null,
+  },
+  {
+    id: "post-seed-5",
+    author_member_id: "mock-member-row-4",
+    author_staff_id: null,
+    system_generated: false,
+    body: "Match photo from the league night — long session 🎱",
+    media_type: "image",
+    media_url:
+      "https://images.unsplash.com/photo-1506359585186-16ef2a2c3b49?w=1080&q=80",
+    created_at: daysAgoIso(4),
+    deleted_at: null,
+    deleted_by_member_id: null,
+    deleted_by_staff_id: null,
+  },
+  {
+    id: "post-seed-6",
+    author_member_id: "mock-member-row-1",
+    author_staff_id: null,
+    system_generated: false,
+    body: "GG to @James, tough match tonight. Race to 7, came down to the last rack.",
+    media_type: "none",
+    media_url: null,
+    created_at: daysAgoIso(5),
+    deleted_at: null,
+    deleted_by_member_id: null,
+    deleted_by_staff_id: null,
+  },
+  {
+    id: "post-seed-7",
+    author_member_id: null,
+    author_staff_id: "mock-staff-row-3",
+    system_generated: false,
+    body: "Welcome to our 3 new members this month 🎉",
+    media_type: "none",
+    media_url: null,
+    created_at: daysAgoIso(8),
+    deleted_at: null,
+    deleted_by_member_id: null,
+    deleted_by_staff_id: null,
+  },
+  {
+    id: "post-seed-8",
+    author_member_id: null,
+    author_staff_id: "mock-staff-row-1",
+    system_generated: false,
+    body: "New Espresso Martini recipe in the book — try it and let us know.",
+    media_type: "none",
+    media_url: null,
+    created_at: daysAgoIso(12),
+    deleted_at: null,
+    deleted_by_member_id: null,
+    deleted_by_staff_id: null,
+  },
+];
+
+// One row per like; liker_member_id XOR liker_staff_id. Counts per seeded post:
+//   post-seed-1 → 2 (Mona, Alex)
+//   post-seed-2 → 4 (Mona, Priya, Jordan, Sam)
+//   post-seed-3 → 3 (Alex, Priya, Maya)
+//   post-seed-4 → 1 (Mona)
+//   post-seed-5 → 5 (Mona, Alex, Priya, Sam, Maya)
+//   post-seed-6 → 6 (Alex, Priya, Jordan, Sam, Maya, Olive)
+//   post-seed-7 → 8 (Mona, Alex, Priya, Jordan, Sam, Maya, Olive, + self-owner skipped → use duplicate name no: seeded once each; pad with staff duplicates avoided)
+//   post-seed-8 → 2 (Mona, Maya)
+// Mona (mock-member-row-1) likes seeds 1, 2, 4, 5, 7, 8 so the
+// "liked by current user" state is visible when signed in as member.
+export const MOCK_POST_LIKES: PostLikeRow[] = [
+  // post-seed-1 (2 likes)
+  {
+    post_id: "post-seed-1",
+    liker_member_id: "mock-member-row-1",
+    liker_staff_id: null,
+    created_at: hoursAgoIso(1),
+  },
+  {
+    post_id: "post-seed-1",
+    liker_member_id: "mock-member-row-2",
+    liker_staff_id: null,
+    created_at: hoursAgoIso(1),
+  },
+
+  // post-seed-2 (4 likes, incl. Mona)
+  {
+    post_id: "post-seed-2",
+    liker_member_id: "mock-member-row-1",
+    liker_staff_id: null,
+    created_at: daysAgoIso(1),
+  },
+  {
+    post_id: "post-seed-2",
+    liker_member_id: "mock-member-row-3",
+    liker_staff_id: null,
+    created_at: daysAgoIso(1),
+  },
+  {
+    post_id: "post-seed-2",
+    liker_member_id: "mock-member-row-4",
+    liker_staff_id: null,
+    created_at: daysAgoIso(1),
+  },
+  {
+    post_id: "post-seed-2",
+    liker_member_id: null,
+    liker_staff_id: "mock-staff-row-1",
+    created_at: daysAgoIso(1),
+  },
+
+  // post-seed-3 (3 likes — Mona not liking)
+  {
+    post_id: "post-seed-3",
+    liker_member_id: "mock-member-row-2",
+    liker_staff_id: null,
+    created_at: daysAgoIso(2),
+  },
+  {
+    post_id: "post-seed-3",
+    liker_member_id: "mock-member-row-3",
+    liker_staff_id: null,
+    created_at: daysAgoIso(2),
+  },
+  {
+    post_id: "post-seed-3",
+    liker_member_id: null,
+    liker_staff_id: "mock-staff-row-2",
+    created_at: daysAgoIso(2),
+  },
+
+  // post-seed-4 (1 like — Mona)
+  {
+    post_id: "post-seed-4",
+    liker_member_id: "mock-member-row-1",
+    liker_staff_id: null,
+    created_at: daysAgoIso(3),
+  },
+
+  // post-seed-5 (5 likes, incl. Mona)
+  {
+    post_id: "post-seed-5",
+    liker_member_id: "mock-member-row-1",
+    liker_staff_id: null,
+    created_at: daysAgoIso(4),
+  },
+  {
+    post_id: "post-seed-5",
+    liker_member_id: "mock-member-row-2",
+    liker_staff_id: null,
+    created_at: daysAgoIso(4),
+  },
+  {
+    post_id: "post-seed-5",
+    liker_member_id: "mock-member-row-3",
+    liker_staff_id: null,
+    created_at: daysAgoIso(4),
+  },
+  {
+    post_id: "post-seed-5",
+    liker_member_id: null,
+    liker_staff_id: "mock-staff-row-1",
+    created_at: daysAgoIso(4),
+  },
+  {
+    post_id: "post-seed-5",
+    liker_member_id: null,
+    liker_staff_id: "mock-staff-row-2",
+    created_at: daysAgoIso(4),
+  },
+
+  // post-seed-6 (6 likes — Mona's own post, not auto-liked)
+  {
+    post_id: "post-seed-6",
+    liker_member_id: "mock-member-row-2",
+    liker_staff_id: null,
+    created_at: daysAgoIso(5),
+  },
+  {
+    post_id: "post-seed-6",
+    liker_member_id: "mock-member-row-3",
+    liker_staff_id: null,
+    created_at: daysAgoIso(5),
+  },
+  {
+    post_id: "post-seed-6",
+    liker_member_id: "mock-member-row-4",
+    liker_staff_id: null,
+    created_at: daysAgoIso(5),
+  },
+  {
+    post_id: "post-seed-6",
+    liker_member_id: null,
+    liker_staff_id: "mock-staff-row-1",
+    created_at: daysAgoIso(5),
+  },
+  {
+    post_id: "post-seed-6",
+    liker_member_id: null,
+    liker_staff_id: "mock-staff-row-2",
+    created_at: daysAgoIso(5),
+  },
+  {
+    post_id: "post-seed-6",
+    liker_member_id: null,
+    liker_staff_id: "mock-staff-row-3",
+    created_at: daysAgoIso(5),
+  },
+
+  // post-seed-7 (7 likes, incl. Mona — every other member/staff)
+  {
+    post_id: "post-seed-7",
+    liker_member_id: "mock-member-row-1",
+    liker_staff_id: null,
+    created_at: daysAgoIso(8),
+  },
+  {
+    post_id: "post-seed-7",
+    liker_member_id: "mock-member-row-2",
+    liker_staff_id: null,
+    created_at: daysAgoIso(8),
+  },
+  {
+    post_id: "post-seed-7",
+    liker_member_id: "mock-member-row-3",
+    liker_staff_id: null,
+    created_at: daysAgoIso(8),
+  },
+  {
+    post_id: "post-seed-7",
+    liker_member_id: "mock-member-row-4",
+    liker_staff_id: null,
+    created_at: daysAgoIso(8),
+  },
+  {
+    post_id: "post-seed-7",
+    liker_member_id: null,
+    liker_staff_id: "mock-staff-row-1",
+    created_at: daysAgoIso(8),
+  },
+  {
+    post_id: "post-seed-7",
+    liker_member_id: null,
+    liker_staff_id: "mock-staff-row-2",
+    created_at: daysAgoIso(8),
+  },
+  {
+    post_id: "post-seed-7",
+    liker_member_id: null,
+    liker_staff_id: "mock-staff-row-3",
+    created_at: daysAgoIso(8),
+  },
+
+  // post-seed-8 (2 likes, incl. Mona)
+  {
+    post_id: "post-seed-8",
+    liker_member_id: "mock-member-row-1",
+    liker_staff_id: null,
+    created_at: daysAgoIso(12),
+  },
+  {
+    post_id: "post-seed-8",
+    liker_member_id: null,
+    liker_staff_id: "mock-staff-row-2",
+    created_at: daysAgoIso(12),
   },
 ];
