@@ -23,7 +23,7 @@ Club management platform for a billiards venue in Singapore. NOT a POS — sits 
 - Snake_case for DB column names / TypeScript fields (matches Supabase response shape).
 - Mock data lives in `src/lib/data/mock-data.ts`. Mutations in mock mode modify arrays in-place.
 - Server actions live in `src/app/actions/` — one file per domain.
-- Route groups: `(auth)/` public, `(member)/` all roles, `(staff)/` staff+, `(owner)/` owner only.
+- Route groups: `(auth)/` public, `(member)/` all roles, `(staff)/` staff+, `(owner)/` owner only, `(community)/` all authenticated roles (feed).
 
 ## Database
 - 10 tables, 30+ RLS policies, 3 migrations in `supabase/migrations/`.
@@ -287,6 +287,89 @@ concern, not a member-facing feature.
   Espresso Martini, Virgin Mojito, Jägerbomb, Long Black — each with proper
   ingredients and steps. `MOCK_RECIPE_INGREDIENTS` + `MOCK_RECIPE_STEPS`
   hold their detail rows. `resetMockData()` restores all three arrays.
+
+## Social feed (Session 20)
+Community feed shared across all authenticated roles (member/staff/manager/
+owner). Container for future tournament results and achievement unlocks —
+the data model already supports `system_generated = true` posts, but no
+auto-post logic is wired this session.
+
+- **Route group:** lives under `(community)/` so both members and staff see
+  the same `/feed` page. `RouteGuard` allows every authenticated role.
+- **Schema:** migration 010 adds two tables:
+  - `posts` — polymorphic authorship: `author_member_id` XOR `author_staff_id`
+    for human authors, OR `system_generated = true` with both nulls. A
+    `posts_authorship` CHECK constraint enforces this at the DB so bad writes
+    are rejected. Media is `media_type IN ('none','youtube','image')` with a
+    matching `posts_media` CHECK on `media_url`. Soft-deleted via
+    `deleted_at` (no hard deletes).
+  - `post_likes` — liker_member_id XOR liker_staff_id, with two partial
+    unique indexes enforcing one-like-per-liker-per-post.
+- **YouTube IDs, not URLs:** `media_url` stores the 11-char video id when
+  `media_type = 'youtube'`. Embeds render via
+  `https://www.youtube-nocookie.com/embed/<id>` (privacy-enhanced). The
+  parser `src/lib/youtube.ts` handles all 7 URL variants (watch, youtu.be,
+  embed, shorts, m., etc.) and rejects anything else. Image URLs are stored
+  as-is — they must be https + end in `.jpg/.jpeg/.png/.gif/.webp`.
+- **Moderation:** RLS allows INSERT on `posts` (self-author) and
+  SELECT/INSERT/DELETE on `post_likes` (self-liker). UPDATE and DELETE on
+  `posts` are NOT covered by any policy, which makes them deny-by-default
+  for the anon/authenticated roles. Soft-delete goes through the service
+  role via `deletePostAction`, which enforces "author OR manager/owner" in
+  application code.
+- **Data layer:** `src/lib/data/posts.ts` (dual-mode).
+  - `listFeed({ beforeCursor?, limit?, currentUser })` does cursor
+    pagination on `created_at DESC` — asks Supabase for `limit + 1` rows
+    and uses the extra row's timestamp as `nextCursor`. The real-mode
+    query uses embedded-resource joins (`author_member:members!...`,
+    `post_likes(...)`) so the whole page — authors, like counts, and
+    likedByCurrentUser — comes back in one round trip. No N+1.
+  - `toggleLike` is idempotent: inspects current state, inserts or deletes,
+    returns the new count.
+  - `softDeletePost` uses the service-role admin client in real mode (RLS
+    blocks UPDATE on posts).
+- **Server actions:** `src/app/actions/posts.ts`.
+  - `createPostAction` validates body (1–500 chars, trimmed) and resolves
+    the optional media URL: YouTube-shaped URLs go through
+    `extractYouTubeVideoId` (reject on null), https image URLs must end
+    with a supported image extension, anything else is rejected.
+  - `deletePostAction` authorises "author OR manager/owner" before calling
+    the data layer.
+  - `toggleLikeAction` is optimistic — returns `{ liked, newCount }` so
+    clients can render immediately; no `revalidatePath` call because
+    likes aren't audit-logged and don't need a route refetch.
+  - Audit log: `post.created` and `post.deleted` are written best-effort to
+    the existing `audit_log` table (mock mode skips them). Likes are NOT
+    audit-logged — too noisy.
+- **UI:** `src/components/feed/`.
+  - `FeedClient` is the interactive shell: holds posts + cursor in state
+    so create/delete/load-more mutate the list locally without a
+    full-page refetch.
+  - `PostComposer` is inline at the top of the feed (no separate
+    `/feed/new` route). Live char counter turns amber at 480 and rose at
+    501+. Media URL input shows an inline preview for YouTube/image.
+  - `PostCard` renders author row, linkified body, media, like button,
+    and (conditionally) a delete button. Delete confirms via
+    `window.confirm`.
+  - `LikeButton` is optimistic — flips state + count immediately, reverts
+    on action failure, then reconciles with the server's authoritative
+    count so concurrent likes from another session aren't lost.
+  - `PostImage` uses a plain `<img>` (not `next/image`) so we don't have
+    to maintain a domain allow-list for arbitrary user URLs.
+- **Linkification:** plain-text regex on `https?://…` produces external
+  anchors with `target="_blank" rel="noopener noreferrer"`. No markdown.
+- **Nav:** `MessageCircle` icon added to `MemberNav` and both staff navs
+  (`StaffMobileNav`, `StaffSidebar`). Same URL for everyone — `/feed`.
+- **Mock mode:** `MOCK_POSTS` seeds 8 posts spanning ~2 weeks with author
+  variety (staff / manager / owner / 4 members) and one YouTube + one
+  image example. `MOCK_POST_LIKES` seeds realistic like counts and
+  includes likes by `mock-member-row-1` (Mona) so the "liked by current
+  user" state is visible when signed in as the primary member.
+- **Future use:** `system_generated = true` is reserved for auto-posts
+  from tournament results (Session 21) and achievement unlocks. The row
+  shape is supported top-to-bottom (DB CHECK, types, data layer enrichment
+  returns `{ kind: 'system' }`, PostCard renders a "System" badge) but no
+  code writes such rows yet.
 
 ### Environment variables
 
