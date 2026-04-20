@@ -165,6 +165,7 @@ describe("tables data layer (mock mode)", () => {
         created_by: "mock-member-row-1",
         notes: null,
         no_show: false,
+        reminder_sent_at: null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });

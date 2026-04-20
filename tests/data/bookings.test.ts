@@ -80,7 +80,7 @@ describe("bookings data layer (mock mode)", () => {
       expect(rows.length).toBeGreaterThan(0);
       for (const r of rows) {
         const isPastTime = r.booking.ends_at < new Date().toISOString();
-        const isTerminal = ["completed", "cancelled", "no_show"].includes(
+        const isTerminal = ["completed", "cancelled"].includes(
           r.booking.status
         );
         expect(isPastTime || isTerminal).toBe(true);
@@ -404,6 +404,7 @@ describe("bookings data layer (mock mode)", () => {
         created_by: MEMBER_ID,
         notes: null,
         no_show: false,
+        reminder_sent_at: null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });
@@ -436,6 +437,7 @@ describe("bookings data layer (mock mode)", () => {
         created_by: MEMBER_ID,
         notes: null,
         no_show: false,
+        reminder_sent_at: null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });
@@ -458,6 +460,7 @@ describe("bookings data layer (mock mode)", () => {
         created_by: MEMBER_ID,
         notes: null,
         no_show: false,
+        reminder_sent_at: null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });

@@ -89,6 +89,11 @@ booking blocks). Policy decisions live in a future session.
   per-member counts stay cheap. The "completed-only" rule is enforced in the
   application layer (`markNoShow` / `unmarkNoShow`) — a CHECK against `status`
   would fight the auto-complete sweep's UPDATE ordering.
+- **Type note (fixed in Session 17):** `no_show` is a boolean column, NOT a
+  booking status. The `BookingStatus` union is `"confirmed" | "cancelled" |
+  "completed"` — nothing ever writes `status = 'no_show'`. Filters for
+  historical bookings use `status.in.(completed,cancelled)` with the
+  `no_show` flag applied separately.
 - **RLS:** the existing `bookings update: own or staff` policy already covers
   staff writes to `no_show`, so migration 006 adds no new policies.
 - **Data layer:** `markNoShow` / `unmarkNoShow` / `getNoShowCountForMember` /
@@ -113,3 +118,48 @@ booking blocks). Policy decisions live in a future session.
 - **Out of scope this session:** no changes to the Floor view (real-time
   operational; historical no-shows would clutter it) and no changes to
   booking creation, cancellation, or credit flows.
+
+## Booking reminders (Session 17)
+A Vercel Cron job delivers a Web Push reminder ~1 hour before each member
+session starts. No in-app notifications, no SMS, no email — this is the push
+stack from Session 15 reused on a schedule.
+
+- **Schema:** `bookings.reminder_sent_at timestamptz NULL` (migration 007).
+  NULL means no reminder has been sent; the cron stamps `now()` after a send
+  attempt. No new index — the cron query filters on `starts_at` first
+  (covered by migration 004's composite indexes) before checking the column.
+- **Cron config:** `vercel.json` declares a single cron at
+  `/api/cron/booking-reminders` on the `*/15 * * * *` schedule (every 15
+  minutes). Vercel Cron sends `GET` with
+  `Authorization: Bearer <CRON_SECRET>`.
+- **Route:** `src/app/api/cron/booking-reminders/route.ts`. Verifies the
+  bearer token first (401 otherwise), short-circuits with `{ sent: 0 }` in
+  mock mode, otherwise computes the UTC window `[now+45min, now+75min]` and
+  sends one push per booking. `reminder_sent_at` is stamped AFTER a push
+  attempt so a failing push retries on the next tick. Per-booking failures
+  are logged and do not halt the batch.
+- **Data layer:** `getBookingsNeedingReminder(windowStartUtc, windowEndUtc)`
+  and `markReminderSent(bookingId)` in `src/lib/data/bookings.ts`. The query
+  filters `status = 'confirmed'`, `booking_type = 'member'`, the
+  `starts_at` range, and `reminder_sent_at IS NULL`. Walk-ins, admin
+  blocks, cancelled/completed bookings, and already-reminded bookings are
+  excluded by construction.
+- **Idempotency:** `reminder_sent_at` is the idempotency key — a duplicate
+  cron run in the same window cannot send a second reminder. The push
+  payload also carries `tag: reminder-<id>` so the device collapses any
+  residual duplicate notification.
+- **Env var:** `CRON_SECRET` — any random string (e.g. `openssl rand -hex
+  32`). The route 401s when the variable is unset or when the header doesn't
+  match; Vercel Cron automatically includes it on scheduled invocations.
+- **Mock mode:** `getBookingsNeedingReminder` filters the in-memory
+  `MOCK_BOOKINGS` array, `markReminderSent` mutates the row, and the cron
+  route returns `{ sent: 0, mock: true }` without touching the data layer
+  so local dev stays quiet.
+
+### Environment variables
+
+| Name | Purpose | Required for |
+|------|---------|--------------|
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | VAPID public key, exposed to browser | Push |
+| `VAPID_PRIVATE_KEY` | VAPID private key, server only | Push |
+| `CRON_SECRET` | Vercel Cron authentication bearer token | Booking reminders |

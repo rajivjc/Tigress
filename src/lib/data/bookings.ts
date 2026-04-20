@@ -109,8 +109,7 @@ export async function getPastBookings(
         b.member_id === memberId &&
         (b.ends_at < nowIso ||
           b.status === "completed" ||
-          b.status === "cancelled" ||
-          b.status === "no_show")
+          b.status === "cancelled")
     )
       .sort(compareDesc)
       .slice(0, limit);
@@ -126,7 +125,7 @@ export async function getPastBookings(
     )
     .eq("member_id", memberId)
     .or(
-      `ends_at.lt.${nowIso},status.in.(completed,cancelled,no_show)`
+      `ends_at.lt.${nowIso},status.in.(completed,cancelled)`
     )
     .order("starts_at", { ascending: false })
     .limit(limit);
@@ -348,6 +347,120 @@ export async function getNoShowHistoryForMember(
     .order("starts_at", { ascending: false })
     .limit(50);
   return (data as Booking[] | null) ?? [];
+}
+
+// ---------- Booking reminders ----------
+
+export interface BookingWithMember {
+  booking_id: string;
+  member_id: string;
+  member_name: string;
+  table_number: number;
+  starts_at: string;
+  ends_at: string;
+}
+
+/**
+ * Confirmed member bookings whose start time falls inside the given UTC
+ * window AND that have not yet been reminded. Drives the
+ * `/api/cron/booking-reminders` route — the caller computes the window as
+ * `[now+45min, now+75min]` so each booking is reminded exactly once with the
+ * 15-minute cron cadence.
+ */
+export async function getBookingsNeedingReminder(
+  windowStartUtc: string,
+  windowEndUtc: string
+): Promise<BookingWithMember[]> {
+  if (!isSupabaseConfigured()) {
+    // Mock mode: the cron never actually runs without Supabase, but we still
+    // let the function resolve so the route handler returns { sent: 0 }
+    // cleanly when called locally for testing.
+    const rows = MOCK_BOOKINGS.filter(
+      (b) =>
+        b.status === "confirmed" &&
+        b.booking_type === "member" &&
+        b.member_id !== null &&
+        b.reminder_sent_at === null &&
+        b.starts_at >= windowStartUtc &&
+        b.starts_at < windowEndUtc
+    );
+    return rows
+      .map((b) => {
+        const member = b.member_id ? findMockMemberById(b.member_id) : null;
+        const table = findMockTableById(b.table_id);
+        if (!member || !table) return null;
+        return {
+          booking_id: b.id,
+          member_id: member.id,
+          member_name: member.full_name,
+          table_number: table.table_number,
+          starts_at: b.starts_at,
+          ends_at: b.ends_at,
+        };
+      })
+      .filter((r): r is BookingWithMember => r !== null);
+  }
+
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("bookings")
+    .select(
+      "id, member_id, starts_at, ends_at, tables(table_number), members!bookings_member_id_fkey(full_name)"
+    )
+    .eq("status", "confirmed")
+    .eq("booking_type", "member")
+    .is("reminder_sent_at", null)
+    .gte("starts_at", windowStartUtc)
+    .lt("starts_at", windowEndUtc);
+
+  type Row = {
+    id: string;
+    member_id: string | null;
+    starts_at: string;
+    ends_at: string;
+    tables: { table_number: number } | null;
+    members: { full_name: string } | null;
+  };
+
+  return ((data as unknown as Row[] | null) ?? [])
+    .map((r) => {
+      if (!r.member_id || !r.tables || !r.members) return null;
+      return {
+        booking_id: r.id,
+        member_id: r.member_id,
+        member_name: r.members.full_name,
+        table_number: r.tables.table_number,
+        starts_at: r.starts_at,
+        ends_at: r.ends_at,
+      };
+    })
+    .filter((r): r is BookingWithMember => r !== null);
+}
+
+/**
+ * Stamps `reminder_sent_at = now()` on a single booking so subsequent cron
+ * runs skip it. Called after a push send attempt — idempotent by column
+ * constraint.
+ */
+export async function markReminderSent(
+  bookingId: string
+): Promise<{ success: boolean }> {
+  const nowIso = new Date().toISOString();
+  if (!isSupabaseConfigured()) {
+    const row = MOCK_BOOKINGS.find((b) => b.id === bookingId);
+    if (row) {
+      row.reminder_sent_at = nowIso;
+      row.updated_at = nowIso;
+    }
+    return { success: true };
+  }
+
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("bookings")
+    .update({ reminder_sent_at: nowIso })
+    .eq("id", bookingId);
+  return { success: !error };
 }
 
 async function writeNoShowAuditLog(
@@ -760,6 +873,7 @@ async function createBookingMock(
     created_by: input.member_id,
     notes: null,
     no_show: false,
+    reminder_sent_at: null,
     created_at: nowIso,
     updated_at: nowIso,
   };
@@ -865,6 +979,7 @@ export async function createWalkIn(
       created_by: input.created_by,
       notes: null,
       no_show: false,
+      reminder_sent_at: null,
       created_at: nowIso,
       updated_at: nowIso,
     };
