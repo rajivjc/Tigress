@@ -403,6 +403,7 @@ describe("bookings data layer (mock mode)", () => {
         booking_type: "member",
         created_by: MEMBER_ID,
         notes: null,
+        no_show: false,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });
@@ -434,6 +435,7 @@ describe("bookings data layer (mock mode)", () => {
         booking_type: "member",
         created_by: MEMBER_ID,
         notes: null,
+        no_show: false,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });
@@ -455,6 +457,7 @@ describe("bookings data layer (mock mode)", () => {
         booking_type: "member",
         created_by: MEMBER_ID,
         notes: null,
+        no_show: false,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });

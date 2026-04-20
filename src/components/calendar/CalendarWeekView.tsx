@@ -30,6 +30,7 @@ interface DaySummary {
   dayLabel: string;
   booking_count: number;
   block_count: number;
+  no_show_count: number;
   is_today: boolean;
 }
 
@@ -49,17 +50,20 @@ export function CalendarWeekView({ week }: CalendarWeekViewProps) {
     return week.dates.map((date, idx) => {
       let booking_count = 0;
       let block_count = 0;
+      let no_show_count = 0;
       for (const row of week.grid) {
         const cell = row[idx];
         if (!cell) continue;
         booking_count += cell.booking_count;
         block_count += cell.block_count;
+        no_show_count += cell.no_show_count;
       }
       return {
         date,
         dayLabel: DAY_LABELS[idx] ?? "",
         booking_count,
         block_count,
+        no_show_count,
         is_today: date === today,
       };
     });
@@ -186,6 +190,11 @@ function DayCard({
       `${day.block_count} block${day.block_count === 1 ? "" : "s"}`
     );
   }
+  if (day.no_show_count > 0) {
+    extras.push(
+      `${day.no_show_count} no-show${day.no_show_count === 1 ? "" : "s"}`
+    );
+  }
 
   return (
     <button
@@ -246,20 +255,31 @@ function WeekRow({
         const total = cell.booking_count + cell.block_count;
         const intensity = Math.min(total, 5); // cap for colour scale
         const bgClass = intensityClass(intensity, cell.block_count > 0);
+        const noShowSuffix = cell.no_show_count
+          ? `, ${cell.no_show_count} no-show${
+              cell.no_show_count === 1 ? "" : "s"
+            }`
+          : "";
         return (
           <button
             key={cell.date}
             type="button"
             onClick={() => onSelect(cell.date)}
-            className={`flex h-10 items-center justify-center rounded-md border border-white/5 text-[11px] font-medium text-white/90 transition-colors hover:border-accent/50 ${bgClass}`}
+            className={`relative flex h-10 items-center justify-center rounded-md border border-white/5 text-[11px] font-medium text-white/90 transition-colors hover:border-accent/50 ${bgClass}`}
             title={`${cell.booking_count} booking${
               cell.booking_count === 1 ? "" : "s"
-            }${cell.block_count ? `, ${cell.block_count} block(s)` : ""}`}
+            }${cell.block_count ? `, ${cell.block_count} block(s)` : ""}${noShowSuffix}`}
           >
             {total === 0 ? (
               <span className="text-white/30">—</span>
             ) : (
               <span>{total}</span>
+            )}
+            {cell.no_show_count > 0 && (
+              <span
+                aria-hidden="true"
+                className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-rose-400"
+              />
             )}
           </button>
         );
