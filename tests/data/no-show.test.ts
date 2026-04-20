@@ -31,6 +31,7 @@ function pushBooking(overrides: Partial<Booking>): string {
     created_by: MEMBER_ID,
     notes: null,
     no_show: false,
+    reminder_sent_at: null,
     created_at: now,
     updated_at: now,
     ...overrides,

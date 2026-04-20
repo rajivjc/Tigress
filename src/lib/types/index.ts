@@ -39,11 +39,7 @@ export type TableStatus =
   | "reserved"
   | "blocked";
 
-export type BookingStatus =
-  | "confirmed"
-  | "cancelled"
-  | "completed"
-  | "no_show";
+export type BookingStatus = "confirmed" | "cancelled" | "completed";
 
 export type BookingType = "member" | "walk_in" | "admin_block";
 
@@ -120,6 +116,7 @@ export interface Booking {
   created_by: string | null;
   notes: string | null;
   no_show: boolean;
+  reminder_sent_at: string | null;
   created_at: string;
   updated_at: string;
 }

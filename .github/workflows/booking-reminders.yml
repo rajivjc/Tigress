@@ -1,0 +1,48 @@
+# =============================================================================
+# Booking reminders — external scheduler
+# =============================================================================
+# Vercel Hobby caps cron frequency at 1/day, which is too coarse for the
+# "~1 hour before session" reminder we want. Instead of paying for Pro, we
+# trigger the endpoint from GitHub Actions on a */15 schedule and keep the
+# route itself unchanged.
+#
+# GitHub's scheduled workflows can drift by several minutes under load. That's
+# fine: the reminder window is 30 min wide (45–75 min before start) and
+# `reminder_sent_at` guarantees at-most-once delivery, so occasional late
+# ticks still land inside the window without duplicates.
+#
+# Required secrets (Repository settings → Secrets → Actions):
+#   CRON_TARGET_URL  — deployment origin, e.g. https://tigress.vercel.app
+#   CRON_SECRET      — same value as the CRON_SECRET env var in Vercel
+# =============================================================================
+
+name: Booking reminders
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  # Manual trigger for ad-hoc testing from the Actions tab.
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    # Don't let a transient hiccup fail the whole run loudly — the next tick
+    # will retry any booking that didn't get reminded.
+    timeout-minutes: 2
+    steps:
+      - name: Hit /api/cron/booking-reminders
+        env:
+          CRON_TARGET_URL: ${{ secrets.CRON_TARGET_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CRON_TARGET_URL:-}" ] || [ -z "${CRON_SECRET:-}" ]; then
+            echo "::error::CRON_TARGET_URL and CRON_SECRET must both be set as repository secrets."
+            exit 1
+          fi
+          curl --fail --show-error --silent \
+               --max-time 60 \
+               -H "Authorization: Bearer ${CRON_SECRET}" \
+               "${CRON_TARGET_URL%/}/api/cron/booking-reminders"
+          echo

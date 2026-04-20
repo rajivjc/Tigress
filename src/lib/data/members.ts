@@ -337,7 +337,7 @@ export async function getMemberDetailById(
       .from("bookings")
       .select("*, tables(id, table_number, name)")
       .eq("member_id", memberId)
-      .or(`starts_at.lte.${nowIso},status.in.(completed,cancelled,no_show)`)
+      .or(`starts_at.lte.${nowIso},status.in.(completed,cancelled)`)
       .order("starts_at", { ascending: false })
       .limit(10),
   ]);

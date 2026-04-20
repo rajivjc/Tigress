@@ -14,14 +14,12 @@ const STATUS_STYLES: Record<BookingStatus, string> = {
   confirmed: "bg-accent/15 text-accent",
   completed: "bg-emerald-500/15 text-emerald-300",
   cancelled: "bg-red-500/15 text-red-300",
-  no_show: "bg-amber-500/15 text-amber-300",
 };
 
 const STATUS_LABELS: Record<BookingStatus, string> = {
   confirmed: "Confirmed",
   completed: "Completed",
   cancelled: "Cancelled",
-  no_show: "No show",
 };
 
 const INVITE_STYLES: Record<BookingInviteStatus, string> = {
