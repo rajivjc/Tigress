@@ -371,6 +371,65 @@ auto-post logic is wired this session.
   returns `{ kind: 'system' }`, PostCard renders a "System" badge) but no
   code writes such rows yet.
 
+## Competitions module (Session 21)
+Tournaments, leagues, ladders, and casual matches. Ships as an intentionally
+isolated module so it can be lifted out into a standalone product later.
+
+- **Module layout:** all module code lives under `src/competitions/`.
+  Nothing outside imports from there except route pages in
+  `src/app/(owner)/competitions/**` and the sidebar nav entry in
+  `src/components/ui/StaffSidebar.tsx`. Nothing inside imports from the
+  rest of the app except through the Player adapter
+  (`src/competitions/data/players.ts`), the audit wrapper
+  (`src/competitions/audit.ts`), and the events hook
+  (`src/competitions/events.ts`). `tests/competitions/boundary.test.ts`
+  is a grep test that asserts these rules on every CI run — if you add a
+  new integration point, update both the allowlist and this paragraph.
+- **Table prefix:** all 9 new tables use `comp_` — `comp_game_types`,
+  `comp_player_skills`, `comp_guests`, `comp_teams`, `comp_team_members`,
+  `comp_competitions`, `comp_competition_entrants`, `comp_matches`,
+  `comp_match_results`. Prefix exists so a future extraction can find
+  everything with one `LIKE 'comp_%'`.
+- **Player adapter:** `Player` and `PlayerRef` are the module's internal
+  identity currency. `data/players.ts` is the ONLY file that imports
+  `@/lib/data/members`, `@/lib/data/staff`, or `@/lib/auth/*`. Every
+  other file in the module works with the adapter's types and has no
+  idea Tigress has a `members` table. If the module is extracted, this
+  file is where the rewrite happens.
+- **Polymorphic entrants:** a single `comp_competition_entrants` row
+  carries exactly one of (`entrant_member_id`, `entrant_guest_id`,
+  `entrant_team_id`). Matches reference entrants, not players, so
+  guest-vs-member and team-vs-team flow through identically. DB enforces
+  the XOR via a CHECK constraint plus partial unique indexes per subject
+  kind.
+- **Manual handicap:** `comp_player_skills.skill_level` (integer 1..10)
+  is display-only. Each match carries its own `race_to_a` and `race_to_b`
+  columns so organisers set the handicap explicitly at match-creation
+  time. No automatic SL-based adjustment.
+- **Team-night structure:** `comp_matches.parent_match_id` links
+  sub-matches of a team-vs-team night — the parent row is the overall
+  team match, child rows are the individual singles / doubles that make
+  it up. Individual competitions leave `parent_match_id` null.
+  `team_match_config` JSONB on `comp_competitions` defines the slot
+  shape; resolution into child match rows happens in S23.
+- **Loose booking link:** `comp_matches.booking_id` is a nullable FK to
+  `bookings`. Staff book the table manually via the existing booking
+  flow; the match row just annotates which booking it happened on.
+- **Audit events:** every module write uses `writeCompAuditLog(...)`
+  which prefixes the action with `comp.` so extraction-time grep finds
+  the lot. Events cover competitions, entrants, matches, results, teams,
+  guests, and skill updates.
+- **S21 scope:** foundation-only. Ships the tables, Player adapter,
+  dual-mode data layer for all 9 tables, minimal server actions,
+  owner-only `/competitions` admin (list + new + detail view), and the
+  boundary test. **No** bracket generation, **no** standings, **no**
+  member-facing UI, **no** feed auto-posts. Those arrive in S22+.
+- **Mock mode:** seed data lives in `src/competitions/data/mock-data.ts`
+  (module-owned, separate from the top-level mock-data). One draft
+  tournament + one draft league, 2 teams, 2 guests, skill levels for
+  the 4 mock members. The top-level `resetMockData()` helper imports +
+  clones these arrays so tests stay isolated.
+
 ### Environment variables
 
 | Name | Purpose | Required for |
