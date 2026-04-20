@@ -6,6 +6,7 @@ import {
   LayoutGrid,
   Calendar,
   ClipboardCheck,
+  BookOpen,
   History,
   ListChecks,
   UserPlus,
@@ -24,6 +25,7 @@ const staffLinks: SidebarLink[] = [
   { href: "/floor", label: "Floorplan", icon: LayoutGrid },
   { href: "/calendar", label: "Calendar", icon: Calendar },
   { href: "/checklists", label: "Checklists", icon: ClipboardCheck },
+  { href: "/recipes", label: "Recipes", icon: BookOpen },
   { href: "/walk-in", label: "Walk-in", icon: UserPlus },
   { href: "/members", label: "Members", icon: Users },
 ];

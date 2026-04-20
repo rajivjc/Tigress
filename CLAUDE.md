@@ -226,6 +226,68 @@ first staff load of `/checklists` does the work.
   for a date. `__resetMockChecklistInstances()` is exported for tests; the
   standard `resetMockData()` helper also clears them between runs.
 
+## Recipe book (Session 19)
+Structured reference for bar staff. Manager/owner curates drink recipes with
+categorised ingredients (name + amount + unit) and ordered steps; all staff
+can browse and search. Members have no access — recipes are an operational
+concern, not a member-facing feature.
+
+- **Schema:** migration 009 adds three tables:
+  - `recipes` — header row (name, category, optional notes/prep-time/image).
+    Category is constrained by CHECK to
+    `cocktails | mocktails | shots | beer | coffee | other`. Soft-delete via
+    `is_active = false`.
+  - `recipe_ingredients` — one row per ingredient line, with `amount`
+    (nullable for "to taste") and `unit` (nullable, constrained by CHECK to
+    a fixed list — `ml`, `oz`, `cl`, `dash(es)`, `splash`, `piece(s)`,
+    `slice(s)`, `sprig(s)`, `scoop(s)`, `tsp`, `tbsp`, `cup`, `drop(s)`,
+    `pinch`, `whole`). A trigram GIN index on `lower(name)` keeps ingredient
+    search fast.
+  - `recipe_steps` — ordered instruction lines keyed by
+    `(recipe_id, step_number)`.
+- **pg_trgm:** the migration runs `CREATE EXTENSION IF NOT EXISTS pg_trgm`.
+  Supabase has it available; if for some reason it isn't, drop the trigram
+  index — plain `ILIKE` still performs fine at the catalogue's expected
+  scale (<500 recipes).
+- **RLS:** staff SELECT all three tables; manager/owner have full CRUD.
+  Members have no policies at all.
+- **Data layer:** `src/lib/data/recipes.ts` (dual-mode).
+  - `getRecipes({ category?, search?, activeOnly? })` runs two ILIKE queries
+    (one on `recipes.name`, one on `recipe_ingredients.name`), unions the
+    resulting recipe IDs, then fetches + batches the detail. This is what
+    powers "margarita" (by name) AND "campari" (by ingredient) searches. In
+    mock mode the same filter runs in-memory.
+  - `createRecipe` inserts recipe → ingredients → steps. If either child
+    insert fails, the recipe row is rolled back so there's no orphan.
+  - `updateRecipeIngredients` / `updateRecipeSteps` are full-replacement
+    updates — same pattern as checklist template items (delete rows missing
+    from the payload, update existing rows by id, insert the rest).
+  - `deleteRecipe` is a soft-delete (`is_active = false`). No hard delete
+    exposed via the UI.
+- **Server actions:** `src/app/actions/recipes.ts`. Reads require staff+;
+  writes require manager/owner. All mutations revalidate `/recipes` and
+  `/recipes/[id]`.
+- **UI routes (staff console):**
+  - `/recipes` — searchable + category-filterable list. The whole catalogue
+    is prefetched server-side and filtered client-side because it's small
+    and staying instant is more valuable than a round-trip per keystroke.
+    Manager/owner see "Add recipe".
+  - `/recipes/[id]` — detail view, optimised for glanceability while
+    making a drink (large step type, ingredients with an accent-coloured
+    left rail). Manager/owner see "Edit".
+  - `/recipes/new` + `/recipes/[id]/edit` — manager/owner only.
+    `RecipeEditor` uses up/down arrows (mobile-friendly, no DnD dep),
+    delete-row buttons, and a fixed unit dropdown. Archive button sits at
+    the bottom of the edit form.
+- **Ingredient display:** `<amount> <unit> <name>` when the amount is set
+  (e.g. "60 ml Tequila"); `<name> — to taste` when amount is null.
+- **Nav:** `BookOpen` icon added to `StaffMobileNav` (between Checks and
+  Walk-in) and to the Operations section of `StaffSidebar`.
+- **Mock mode:** `MOCK_RECIPES` seeds five realistic recipes — Margarita,
+  Espresso Martini, Virgin Mojito, Jägerbomb, Long Black — each with proper
+  ingredients and steps. `MOCK_RECIPE_INGREDIENTS` + `MOCK_RECIPE_STEPS`
+  hold their detail rows. `resetMockData()` restores all three arrays.
+
 ### Environment variables
 
 | Name | Purpose | Required for |
