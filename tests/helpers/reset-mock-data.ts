@@ -14,6 +14,9 @@ import {
   MOCK_CHECKLIST_TEMPLATE_ITEMS,
   MOCK_INVITED_BOOKINGS,
   MOCK_MEMBERS,
+  MOCK_RECIPES,
+  MOCK_RECIPE_INGREDIENTS,
+  MOCK_RECIPE_STEPS,
   MOCK_TIERS,
   MOCK_WALK_IN_GUESTS,
 } from "@/lib/data/mock-data";
@@ -28,6 +31,11 @@ import type {
   ChecklistTemplate,
   ChecklistTemplateItem,
 } from "@/lib/types/checklists";
+import type {
+  Recipe,
+  RecipeIngredient,
+  RecipeStep,
+} from "@/lib/types/recipes";
 
 function clone<T>(arr: T[]): T[] {
   return arr.map((row) => ({ ...row }) as T);
@@ -45,6 +53,11 @@ const initialChecklistTemplates: ChecklistTemplate[] = clone(
 const initialChecklistTemplateItems: ChecklistTemplateItem[] = clone(
   MOCK_CHECKLIST_TEMPLATE_ITEMS
 );
+const initialRecipes: Recipe[] = clone(MOCK_RECIPES);
+const initialRecipeIngredients: RecipeIngredient[] = clone(
+  MOCK_RECIPE_INGREDIENTS
+);
+const initialRecipeSteps: RecipeStep[] = clone(MOCK_RECIPE_STEPS);
 
 function replaceArray<T>(target: T[], source: T[]): void {
   target.length = 0;
@@ -62,6 +75,9 @@ export function resetMockData(): void {
   replaceArray(MOCK_WALK_IN_GUESTS, initialWalkIns);
   replaceArray(MOCK_CHECKLIST_TEMPLATES, initialChecklistTemplates);
   replaceArray(MOCK_CHECKLIST_TEMPLATE_ITEMS, initialChecklistTemplateItems);
+  replaceArray(MOCK_RECIPES, initialRecipes);
+  replaceArray(MOCK_RECIPE_INGREDIENTS, initialRecipeIngredients);
+  replaceArray(MOCK_RECIPE_STEPS, initialRecipeSteps);
   // Lazy-created instances are always cleared — they rebuild on first access.
   MOCK_CHECKLIST_INSTANCES.length = 0;
   MOCK_CHECKLIST_INSTANCE_ITEMS.length = 0;

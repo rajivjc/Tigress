@@ -21,6 +21,11 @@ import type {
   ChecklistTemplate,
   ChecklistTemplateItem,
 } from "@/lib/types/checklists";
+import type {
+  Recipe,
+  RecipeIngredient,
+  RecipeStep,
+} from "@/lib/types/recipes";
 
 const isoNow = () => new Date().toISOString();
 const fixedCreatedAt = "2025-01-01T00:00:00.000Z";
@@ -646,3 +651,338 @@ export function __resetMockChecklistInstances(): void {
   MOCK_CHECKLIST_INSTANCES.length = 0;
   MOCK_CHECKLIST_INSTANCE_ITEMS.length = 0;
 }
+
+// =============================================================================
+// Recipes (Session 19)
+// =============================================================================
+// Seeded recipes for mock mode. Ingredients + steps are stored as separate
+// arrays so the data layer can mirror the real Supabase response shape.
+
+export const MOCK_RECIPES: Recipe[] = [
+  {
+    id: "recipe-margarita",
+    name: "Margarita",
+    category: "cocktails",
+    notes:
+      "Shake hard — the dilution matters. Salt rim is classic; leave a gap for guests who don't want salt.",
+    prep_time_minutes: 3,
+    image_url: null,
+    is_active: true,
+    created_by: MOCK_MANAGER_STAFF_ID,
+    created_at: fixedCreatedAt,
+    updated_at: fixedCreatedAt,
+  },
+  {
+    id: "recipe-espresso-martini",
+    name: "Espresso Martini",
+    category: "cocktails",
+    notes:
+      "Use freshly-pulled espresso — instant won't foam the same. Double-strain for a clean crema.",
+    prep_time_minutes: 4,
+    image_url: null,
+    is_active: true,
+    created_by: MOCK_MANAGER_STAFF_ID,
+    created_at: fixedCreatedAt,
+    updated_at: fixedCreatedAt,
+  },
+  {
+    id: "recipe-virgin-mojito",
+    name: "Virgin Mojito",
+    category: "mocktails",
+    notes: "Gently press the mint — don't shred it or it goes bitter.",
+    prep_time_minutes: 3,
+    image_url: null,
+    is_active: true,
+    created_by: MOCK_MANAGER_STAFF_ID,
+    created_at: fixedCreatedAt,
+    updated_at: fixedCreatedAt,
+  },
+  {
+    id: "recipe-jagerbomb",
+    name: "Jägerbomb",
+    category: "shots",
+    notes: null,
+    prep_time_minutes: 1,
+    image_url: null,
+    is_active: true,
+    created_by: MOCK_MANAGER_STAFF_ID,
+    created_at: fixedCreatedAt,
+    updated_at: fixedCreatedAt,
+  },
+  {
+    id: "recipe-long-black",
+    name: "Long Black",
+    category: "coffee",
+    notes: "Water first, then espresso — preserves the crema.",
+    prep_time_minutes: 2,
+    image_url: null,
+    is_active: true,
+    created_by: MOCK_MANAGER_STAFF_ID,
+    created_at: fixedCreatedAt,
+    updated_at: fixedCreatedAt,
+  },
+];
+
+export const MOCK_RECIPE_INGREDIENTS: RecipeIngredient[] = [
+  // Margarita
+  {
+    id: "ing-marg-1",
+    recipe_id: "recipe-margarita",
+    name: "Tequila (blanco)",
+    amount: 60,
+    unit: "ml",
+    sort_order: 1,
+  },
+  {
+    id: "ing-marg-2",
+    recipe_id: "recipe-margarita",
+    name: "Triple sec",
+    amount: 30,
+    unit: "ml",
+    sort_order: 2,
+  },
+  {
+    id: "ing-marg-3",
+    recipe_id: "recipe-margarita",
+    name: "Lime juice",
+    amount: 30,
+    unit: "ml",
+    sort_order: 3,
+  },
+  {
+    id: "ing-marg-4",
+    recipe_id: "recipe-margarita",
+    name: "Salt (for rim)",
+    amount: null,
+    unit: null,
+    sort_order: 4,
+  },
+
+  // Espresso Martini
+  {
+    id: "ing-em-1",
+    recipe_id: "recipe-espresso-martini",
+    name: "Vodka",
+    amount: 50,
+    unit: "ml",
+    sort_order: 1,
+  },
+  {
+    id: "ing-em-2",
+    recipe_id: "recipe-espresso-martini",
+    name: "Coffee liqueur",
+    amount: 25,
+    unit: "ml",
+    sort_order: 2,
+  },
+  {
+    id: "ing-em-3",
+    recipe_id: "recipe-espresso-martini",
+    name: "Espresso (fresh)",
+    amount: 30,
+    unit: "ml",
+    sort_order: 3,
+  },
+  {
+    id: "ing-em-4",
+    recipe_id: "recipe-espresso-martini",
+    name: "Simple syrup",
+    amount: 10,
+    unit: "ml",
+    sort_order: 4,
+  },
+  {
+    id: "ing-em-5",
+    recipe_id: "recipe-espresso-martini",
+    name: "Coffee beans (garnish)",
+    amount: 3,
+    unit: "whole",
+    sort_order: 5,
+  },
+
+  // Virgin Mojito
+  {
+    id: "ing-vm-1",
+    recipe_id: "recipe-virgin-mojito",
+    name: "Lime",
+    amount: 0.5,
+    unit: "whole",
+    sort_order: 1,
+  },
+  {
+    id: "ing-vm-2",
+    recipe_id: "recipe-virgin-mojito",
+    name: "Mint leaves",
+    amount: 10,
+    unit: "whole",
+    sort_order: 2,
+  },
+  {
+    id: "ing-vm-3",
+    recipe_id: "recipe-virgin-mojito",
+    name: "Caster sugar",
+    amount: 2,
+    unit: "tsp",
+    sort_order: 3,
+  },
+  {
+    id: "ing-vm-4",
+    recipe_id: "recipe-virgin-mojito",
+    name: "Soda water",
+    amount: 120,
+    unit: "ml",
+    sort_order: 4,
+  },
+
+  // Jägerbomb
+  {
+    id: "ing-jb-1",
+    recipe_id: "recipe-jagerbomb",
+    name: "Jägermeister",
+    amount: 30,
+    unit: "ml",
+    sort_order: 1,
+  },
+  {
+    id: "ing-jb-2",
+    recipe_id: "recipe-jagerbomb",
+    name: "Energy drink",
+    amount: 120,
+    unit: "ml",
+    sort_order: 2,
+  },
+
+  // Long Black
+  {
+    id: "ing-lb-1",
+    recipe_id: "recipe-long-black",
+    name: "Espresso (double shot)",
+    amount: 60,
+    unit: "ml",
+    sort_order: 1,
+  },
+  {
+    id: "ing-lb-2",
+    recipe_id: "recipe-long-black",
+    name: "Hot water",
+    amount: 120,
+    unit: "ml",
+    sort_order: 2,
+  },
+];
+
+export const MOCK_RECIPE_STEPS: RecipeStep[] = [
+  // Margarita
+  {
+    id: "step-marg-1",
+    recipe_id: "recipe-margarita",
+    step_number: 1,
+    instruction: "Rim a chilled coupe or rocks glass with salt.",
+  },
+  {
+    id: "step-marg-2",
+    recipe_id: "recipe-margarita",
+    step_number: 2,
+    instruction:
+      "Add tequila, triple sec, and lime juice to a shaker with ice.",
+  },
+  {
+    id: "step-marg-3",
+    recipe_id: "recipe-margarita",
+    step_number: 3,
+    instruction: "Shake hard for 12 seconds until well-chilled.",
+  },
+  {
+    id: "step-marg-4",
+    recipe_id: "recipe-margarita",
+    step_number: 4,
+    instruction: "Strain into the prepared glass. Garnish with a lime wedge.",
+  },
+
+  // Espresso Martini
+  {
+    id: "step-em-1",
+    recipe_id: "recipe-espresso-martini",
+    step_number: 1,
+    instruction:
+      "Pull a fresh espresso and let it cool for 30 seconds so it doesn't melt the ice too fast.",
+  },
+  {
+    id: "step-em-2",
+    recipe_id: "recipe-espresso-martini",
+    step_number: 2,
+    instruction:
+      "Combine vodka, coffee liqueur, espresso, and simple syrup in a shaker with ice.",
+  },
+  {
+    id: "step-em-3",
+    recipe_id: "recipe-espresso-martini",
+    step_number: 3,
+    instruction: "Shake vigorously for 15 seconds to build a thick foam.",
+  },
+  {
+    id: "step-em-4",
+    recipe_id: "recipe-espresso-martini",
+    step_number: 4,
+    instruction:
+      "Double-strain into a chilled martini glass. Float three coffee beans on top.",
+  },
+
+  // Virgin Mojito
+  {
+    id: "step-vm-1",
+    recipe_id: "recipe-virgin-mojito",
+    step_number: 1,
+    instruction:
+      "Add mint leaves, lime (cut into wedges), and sugar to a tall glass.",
+  },
+  {
+    id: "step-vm-2",
+    recipe_id: "recipe-virgin-mojito",
+    step_number: 2,
+    instruction:
+      "Gently muddle — press the mint, don't shred. Squeeze the lime as you go.",
+  },
+  {
+    id: "step-vm-3",
+    recipe_id: "recipe-virgin-mojito",
+    step_number: 3,
+    instruction: "Fill with crushed ice, top with soda water, and stir briefly.",
+  },
+  {
+    id: "step-vm-4",
+    recipe_id: "recipe-virgin-mojito",
+    step_number: 4,
+    instruction: "Garnish with a mint sprig and a lime wheel.",
+  },
+
+  // Jägerbomb
+  {
+    id: "step-jb-1",
+    recipe_id: "recipe-jagerbomb",
+    step_number: 1,
+    instruction: "Pour energy drink into a highball glass until half full.",
+  },
+  {
+    id: "step-jb-2",
+    recipe_id: "recipe-jagerbomb",
+    step_number: 2,
+    instruction:
+      "Pour the Jägermeister into a shot glass and drop it into the highball to serve.",
+  },
+
+  // Long Black
+  {
+    id: "step-lb-1",
+    recipe_id: "recipe-long-black",
+    step_number: 1,
+    instruction: "Add hot water to a warmed cup.",
+  },
+  {
+    id: "step-lb-2",
+    recipe_id: "recipe-long-black",
+    step_number: 2,
+    instruction:
+      "Pull a double espresso directly on top of the water to preserve the crema.",
+  },
+];

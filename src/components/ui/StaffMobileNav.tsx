@@ -6,6 +6,7 @@ import {
   LayoutGrid,
   Calendar,
   ClipboardCheck,
+  BookOpen,
   UserPlus,
   Users,
   type LucideIcon,
@@ -15,6 +16,7 @@ const links: Array<{ href: string; label: string; icon: LucideIcon }> = [
   { href: "/floor", label: "Floor", icon: LayoutGrid },
   { href: "/calendar", label: "Calendar", icon: Calendar },
   { href: "/checklists", label: "Checks", icon: ClipboardCheck },
+  { href: "/recipes", label: "Recipes", icon: BookOpen },
   { href: "/walk-in", label: "Walk-in", icon: UserPlus },
   { href: "/members", label: "Members", icon: Users },
 ];
