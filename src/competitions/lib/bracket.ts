@@ -116,10 +116,11 @@ export function generateSingleElimBracket(
 
 /**
  * Standard tournament seeding order. For size 2: [1, 2]. Size 4: [1, 4, 2, 3].
- * Size 8: [1, 8, 4, 5, 2, 7, 3, 6]. Size 16: [1, 16, 8, 9, 5, 12, 4, 13,
- * 6, 11, 3, 14, 7, 10, 2, 15]. Built by recursive top-down split: for a
- * bracket of size 2k, interleave the size-k order for the top half with the
- * complementary seeds for the bottom half.
+ * Size 8: [1, 8, 4, 5, 2, 7, 3, 6]. Size 16: [1, 16, 8, 9, 4, 13, 5, 12, 2,
+ * 15, 7, 10, 3, 14, 6, 11]. Built by recursive top-down split: for a bracket
+ * of size 2k, interleave the size-k order by pairing each seed `s` with its
+ * complement `2k+1-s`. Produces the canonical QF/SF/F tree (1v8, 4v5, 2v7,
+ * 3v6 in QFs; 1v4, 2v3 in SFs; 1v2 in the final).
  */
 function buildSeedOrder(size: number): number[] {
   if (size === 1) return [1];

@@ -96,17 +96,17 @@ describe("generateSingleElimBracket — match and round counts", () => {
 });
 
 describe("generateSingleElimBracket — bye placement", () => {
-  it("N=3: bye goes to seed 2 (bottom-half of a 4-bracket)", () => {
+  it("N=3: one bye, goes to seed 1 (top seed)", () => {
     const specs = generateSingleElimBracket(seeded(3));
     const round1 = r1(specs);
-    const byeMatch = round1.find(
-      (s) => !("entrantId" in s.entrantA) || !("entrantId" in s.entrantB)
-    );
-    expect(byeMatch).toBeDefined();
-    const ids = pairIds(byeMatch!);
-    // Non-bye slot should be a real entrant id
-    const real = ids.filter((x): x is string => x !== null);
-    expect(real).toHaveLength(1);
+    const byeOpponents = new Set<string>();
+    for (const s of round1) {
+      const a = slotId(s.entrantA);
+      const b = slotId(s.entrantB);
+      if (a && !b) byeOpponents.add(a);
+      if (b && !a) byeOpponents.add(b);
+    }
+    expect(byeOpponents).toEqual(new Set(["e1"]));
   });
 
   it("N=5: three byes go to top 3 seeds", () => {
