@@ -93,8 +93,8 @@ export async function listChildMatches(parentId: string): Promise<Match[]> {
 
 export interface CreateMatchInput {
   competition_id: string;
-  entrant_a_id: string;
-  entrant_b_id: string;
+  entrant_a_id: string | null;
+  entrant_b_id: string | null;
   game_type_id: string;
   race_to_a: number;
   race_to_b: number;
@@ -104,13 +104,28 @@ export interface CreateMatchInput {
   scheduled_at?: string | null;
   booking_id?: string | null;
   status?: MatchStatus;
+  is_walkover?: boolean;
 }
 
 export async function createMatch(
   input: CreateMatchInput
 ): Promise<{ success: boolean; id?: string; error?: string }> {
-  if (input.entrant_a_id === input.entrant_b_id) {
+  if (
+    input.entrant_a_id !== null &&
+    input.entrant_b_id !== null &&
+    input.entrant_a_id === input.entrant_b_id
+  ) {
     return { success: false, error: "A match needs two distinct entrants" };
+  }
+  const status = input.status ?? "scheduled";
+  if (
+    status !== "scheduled" &&
+    (input.entrant_a_id === null || input.entrant_b_id === null)
+  ) {
+    return {
+      success: false,
+      error: "Both entrants must be set before a match leaves scheduled",
+    };
   }
   if (
     input.race_to_a < RACE_TO_MIN ||
@@ -128,19 +143,25 @@ export async function createMatch(
   // logical constraint — real mode relies on RLS + FK combined with the
   // application-level check in the server action).
   if (!isSupabaseConfigured()) {
-    const a = MOCK_COMP_ENTRANTS.find((e) => e.id === input.entrant_a_id);
-    const b = MOCK_COMP_ENTRANTS.find((e) => e.id === input.entrant_b_id);
-    if (!a || !b) {
-      return { success: false, error: "Entrant not found" };
+    if (input.entrant_a_id !== null) {
+      const a = MOCK_COMP_ENTRANTS.find((e) => e.id === input.entrant_a_id);
+      if (!a) return { success: false, error: "Entrant not found" };
+      if (a.competition_id !== input.competition_id) {
+        return {
+          success: false,
+          error: "Entrants do not belong to this competition",
+        };
+      }
     }
-    if (
-      a.competition_id !== input.competition_id ||
-      b.competition_id !== input.competition_id
-    ) {
-      return {
-        success: false,
-        error: "Entrants do not belong to this competition",
-      };
+    if (input.entrant_b_id !== null) {
+      const b = MOCK_COMP_ENTRANTS.find((e) => e.id === input.entrant_b_id);
+      if (!b) return { success: false, error: "Entrant not found" };
+      if (b.competition_id !== input.competition_id) {
+        return {
+          success: false,
+          error: "Entrants do not belong to this competition",
+        };
+      }
     }
   }
 
@@ -161,7 +182,8 @@ export async function createMatch(
       parent_match_id: input.parent_match_id ?? null,
       scheduled_at: input.scheduled_at ?? null,
       booking_id: input.booking_id ?? null,
-      status: input.status ?? "scheduled",
+      status,
+      is_walkover: input.is_walkover ?? false,
       created_at: nowIso,
       updated_at: nowIso,
     });
@@ -183,7 +205,8 @@ export async function createMatch(
       parent_match_id: input.parent_match_id ?? null,
       scheduled_at: input.scheduled_at ?? null,
       booking_id: input.booking_id ?? null,
-      status: input.status ?? "scheduled",
+      status,
+      is_walkover: input.is_walkover ?? false,
     })
     .select("id")
     .maybeSingle();
