@@ -28,7 +28,9 @@ const COMP_PREFIX = "src/competitions/";
 
 // Files OUTSIDE src/competitions/ that are allowed to import from it.
 const OUTSIDE_ALLOWLIST = [
-  /^src\/app\/\(owner\)\/competitions\//,
+  // S22: /competitions moved into (community) so members + staff + owner
+  // share a single URL. Internal role checks gate the write actions.
+  /^src\/app\/\(community\)\/competitions\//,
   /^src\/components\/ui\/StaffSidebar\.tsx$/,
   // Test infrastructure clones module-owned mock arrays so resetMockData()
   // can restore them between tests. Not production code — wouldn't travel

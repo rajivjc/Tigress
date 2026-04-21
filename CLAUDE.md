@@ -430,6 +430,100 @@ isolated module so it can be lifted out into a standalone product later.
   the 4 mock members. The top-level `resetMockData()` helper imports +
   clones these arrays so tests stay isolated.
 
+## Single-elimination tournaments (Session 22)
+
+First playable format. Members register during `registration_open`, manager
+publishes the bracket (auto-seeds by registration order when seeds aren't
+set), the WINNING player of each match reports their result, and the
+system auto-advances the winner into the next round. The module's
+`Player` adapter continues to be the ONLY identity-aware file.
+
+- **Pure generator:** `src/competitions/lib/bracket.ts` is a zero-dep,
+  no-DB, no-React function that takes `SeededEntrant[]` and returns
+  `BracketMatchSpec[]`. Validates N >= 2 and contiguous 1..N seeds.
+  Standard recursive top-down seeding — QFs 1v8/4v5/2v7/3v6 for an
+  8-bracket, SFs 1v4/2v3, Final 1v2. Byes always go to the top seeds.
+  Every spec carries a `feedsInto` pointer (round+1, `ceil(pos/2)`) plus
+  `feedsIntoSlot` ("a" for odd positions, "b" for even).
+- **Migration 012:**
+  - `comp_matches.is_walkover boolean NOT NULL DEFAULT false`.
+  - `entrant_a_id` / `entrant_b_id` drop NOT NULL — round 2+ matches
+    persist with NULL entrants and are filled by auto-advance.
+  - New CHECK `comp_matches_entrants_when_active` requires both
+    entrants the moment a match leaves `scheduled`.
+  - Three new RLS policies: members self-register during
+    registration_open, flip their own row to `withdrawn`, and insert a
+    result on a match they're a participant in. The winner-must-report
+    rule is application-enforced, not SQL.
+- **Persistence — `data/bracket.ts`:**
+  - `persistBracket` INSERTs every round's matches up-front. Round 1
+    byes land as `is_walkover=true`, `status='completed'`, with a
+    synthetic result row (score 0-0, winner = the non-bye side). Rounds
+    2..R are scheduled placeholders with NULL entrants. Re-publish is
+    rejected — managers must `clearBracket` first.
+  - `advanceWinner` writes the winner into the downstream slot via a
+    `(competitionId, round, position)` lookup. Returns `null` for the
+    final.
+  - `revertAdvance` walks the chain: when an upstream result is cleared
+    or overridden, the downstream slot is nulled and any downstream
+    result is deleted + status reverted to scheduled.
+  - `clearBracket` deletes every match and result for a competition.
+- **Action layer — `actions/`:**
+  - `registration.ts` — members register / withdraw. Pre-bracket
+    withdrawal deletes the entrant row; `in_progress` withdrawal flips
+    `status='withdrawn'`, forfeits every active match as a walkover
+    with the opponent advancing.
+  - `bracket.ts` — `publishBracketAction` (manager+) auto-seeds when
+    seeds are missing, calls `persistBracket`, and transitions the
+    competition to `in_progress`. `clearBracketAction` wipes matches
+    and returns the competition to `registration_open`.
+  - `seeding.ts` — bulk-set seeds or Fisher-Yates random seed. Two-phase
+    writes (clear first, stamp after) so the DB unique index never
+    conflicts mid-update.
+  - `results.ts` — `reportMatchResultAction` for members (enforces the
+    "winning player reports" rule and race-to score sanity).
+    `overrideMatchResultAction` for manager+; when an override would
+    invalidate a completed downstream match, the caller MUST pass
+    `cascadeRevert: true` — otherwise the action refuses so the bracket
+    stays consistent. `clearMatchResultAction` wipes a result and
+    cascades through downstream advances.
+  - Completing the final transitions the competition to `completed` and
+    fires `emitCompEvent({ kind: "competition_completed" })` (no-op
+    placeholder until S26's feed auto-posts).
+- **UI — `/competitions`:** consolidated into the `(community)` route
+  group (allowed to every authenticated role). The old
+  `(owner)/competitions` routes were removed to avoid a path collision
+  (Next.js route groups don't participate in the URL, so two groups
+  can't own `/competitions/page.tsx` simultaneously). Role checks
+  inside each page gate the write controls — members see a read-only
+  bracket + their register/withdraw CTA, manager/owner see the same
+  bracket plus Publish / Clear / Override controls.
+- **Components:** `Bracket.tsx` renders a column-per-round grid with an
+  inline `ReportResultButton` per match card (members only see it when
+  they're a participant in a scheduled match; managers see it for every
+  fully-populated match via the override flag). `RegistrationButton.tsx`
+  drives the member register/withdraw flow. `PublishBracketButton.tsx`
+  is the manager-facing publish / clear control.
+- **Navigation:** `/competitions` is now in every top-level nav — Trophy
+  in `MemberNav` (between Bookings and Feed), `StaffMobileNav` (as
+  "Compete"), and the Operations section of `StaffSidebar`.
+- **Mock mode:** three lifecycle-showcase tournaments are seeded
+  alongside the original draft so dev / preview can render every
+  bracket state without manually publishing:
+  `comp-tournament-regopen-1` (registration_open, 4 members),
+  `comp-tournament-inprogress-1` (in_progress with R1 complete, R2
+  final waiting), `comp-tournament-completed-1` (fully played, Mona
+  champions). The original `comp-tournament-draft-1` is kept as the
+  draft fixture that S21/S22 tests depend on.
+- **Audit events added:** `comp.bracket.published`,
+  `comp.bracket.cleared`, `comp.entrant.self_registered`,
+  `comp.entrant.self_withdrew`, `comp.match.advance_triggered`.
+- **Out of scope this session:** double elimination / round-robin /
+  Swiss (S24), league standings (S23), ladder mechanics (S25), feed
+  auto-posts on completion (S26 — `emitCompEvent` stays a no-op),
+  scheduling integration with bookings, real-time WebSocket bracket
+  updates.
+
 ### Environment variables
 
 | Name | Purpose | Required for |

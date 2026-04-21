@@ -28,6 +28,7 @@ const staffLinks: SidebarLink[] = [
   { href: "/calendar", label: "Calendar", icon: Calendar },
   { href: "/checklists", label: "Checklists", icon: ClipboardCheck },
   { href: "/recipes", label: "Recipes", icon: BookOpen },
+  { href: "/competitions", label: "Competitions", icon: Trophy },
   { href: "/feed", label: "Feed", icon: MessageCircle },
   { href: "/walk-in", label: "Walk-in", icon: UserPlus },
   { href: "/members", label: "Members", icon: Users },
@@ -39,7 +40,6 @@ const managerLinks: SidebarLink[] = [
 ];
 
 const ownerLinks: SidebarLink[] = [
-  { href: "/competitions", label: "Competitions", icon: Trophy },
   { href: "/settings", label: "Settings", icon: Settings },
   { href: "/rates", label: "Rates", icon: DollarSign },
 ];

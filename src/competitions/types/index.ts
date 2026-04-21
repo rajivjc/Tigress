@@ -152,8 +152,8 @@ export interface CompetitionEntrant {
 export interface Match {
   id: string;
   competition_id: string;
-  entrant_a_id: string;
-  entrant_b_id: string;
+  entrant_a_id: string | null;
+  entrant_b_id: string | null;
   game_type_id: string;
   race_to_a: number;
   race_to_b: number;
@@ -163,6 +163,7 @@ export interface Match {
   scheduled_at: string | null;
   booking_id: string | null;
   status: MatchStatus;
+  is_walkover: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -234,11 +235,16 @@ export type CompAuditEventType =
   | "comp.competition.deleted"
   | "comp.entrant.added"
   | "comp.entrant.removed"
+  | "comp.entrant.self_registered"
+  | "comp.entrant.self_withdrew"
   | "comp.match.created"
   | "comp.match.status_changed"
   | "comp.match.result_recorded"
   | "comp.match.result_verified"
   | "comp.match.result_cleared"
+  | "comp.match.advance_triggered"
+  | "comp.bracket.published"
+  | "comp.bracket.cleared"
   | "comp.team.created"
   | "comp.team.archived"
   | "comp.team.roster_added"

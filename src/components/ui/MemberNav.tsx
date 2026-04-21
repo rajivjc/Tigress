@@ -7,6 +7,7 @@ import {
   PlusCircle,
   CalendarDays,
   MessageCircle,
+  Trophy,
   User,
   type LucideIcon,
 } from "lucide-react";
@@ -15,6 +16,7 @@ const links: Array<{ href: string; label: string; icon: LucideIcon }> = [
   { href: "/dashboard", label: "Home", icon: Home },
   { href: "/book", label: "Book", icon: PlusCircle },
   { href: "/bookings", label: "Bookings", icon: CalendarDays },
+  { href: "/competitions", label: "Compete", icon: Trophy },
   { href: "/feed", label: "Feed", icon: MessageCircle },
   { href: "/profile", label: "Profile", icon: User },
 ];

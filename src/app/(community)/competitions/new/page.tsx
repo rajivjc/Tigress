@@ -10,7 +10,9 @@ export const dynamic = "force-dynamic";
 export default async function NewCompetitionPage() {
   const current = await getCurrentStaff();
   if (!current) redirect("/login");
-  if (current.role !== "owner") redirect("/floor");
+  if (current.role !== "owner" && current.role !== "manager") {
+    redirect("/competitions");
+  }
 
   const gameTypes = await listGameTypes();
 
@@ -28,8 +30,8 @@ export default async function NewCompetitionPage() {
           New competition (draft)
         </h1>
         <p className="mt-1 text-xs text-white/50">
-          Create a draft competition. You can add entrants, matches, and
-          promote it to registration from the detail page.
+          Create a draft competition. You can add entrants, open registration,
+          and publish the bracket from the detail page.
         </p>
       </header>
 
