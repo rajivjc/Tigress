@@ -265,6 +265,29 @@ async function finalizeResult(
 
   await updateMatchStatus(args.match_id, "completed");
 
+  // League sub-matches live under a fixture — they don't advance through a
+  // bracket. Fixture-level completion is handled by
+  // `actions/league-results.ts::reportSubMatchResultAction`; this action
+  // just records the result and exits.
+  const matchForRoute = await getMatch(args.match_id);
+  if (matchForRoute && matchForRoute.fixture_id !== null) {
+    await writeCompAuditLog(
+      "comp.match.result_recorded",
+      args.match_id,
+      args.actorId,
+      {
+        matchId: args.match_id,
+        winner: args.winner_entrant_id,
+        scoreA: args.score_a,
+        scoreB: args.score_b,
+        override: args.isOverride,
+        leagueSubMatch: true,
+      }
+    );
+    revalidatePath(`/competitions/${matchForRoute.competition_id}`);
+    return { success: true, nextMatchId: null };
+  }
+
   const adv = await advanceWinner(args.match_id);
   await writeCompAuditLog(
     "comp.match.advance_triggered",

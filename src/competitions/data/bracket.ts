@@ -150,6 +150,7 @@ export async function persistBracket(
       round_number: spec.roundNumber,
       bracket_position: spec.bracketPosition,
       parent_match_id: null,
+      fixture_id: null,
       scheduled_at: null,
       booking_id: null,
       status,

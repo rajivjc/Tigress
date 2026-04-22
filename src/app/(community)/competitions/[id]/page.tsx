@@ -6,13 +6,69 @@ import { getCurrentAuthUserId, getMemberProfile } from "@/lib/data/members";
 import { getCompetition } from "@/competitions/data/competitions";
 import { listEntrantsEnriched } from "@/competitions/data/entrants";
 import { listBracketMatches } from "@/competitions/data/bracket";
+import { listResultsForCompetition } from "@/competitions/data/match-results";
 import { listGameTypes } from "@/competitions/data/game-types";
-import type { MatchResult } from "@/competitions/types";
+import { getCompetitionStandings } from "@/competitions/data/league-standings";
+import { getFixturesEnriched } from "@/competitions/data/fixtures";
 import { Bracket } from "@/competitions/components/Bracket";
+import { StandingsTable } from "@/competitions/components/StandingsTable";
+import { FixtureList } from "@/competitions/components/FixtureList";
 import { RegistrationButton } from "@/competitions/components/RegistrationButton";
+import { WithdrawButton } from "@/competitions/components/WithdrawButton";
 import { PublishBracketButton } from "@/competitions/components/PublishBracketButton";
 
 export const dynamic = "force-dynamic";
+
+async function LeagueSections({
+  competitionId,
+  entrants,
+}: {
+  competitionId: string;
+  entrants: Awaited<ReturnType<typeof listEntrantsEnriched>>;
+}) {
+  const [standings, fixtures] = await Promise.all([
+    getCompetitionStandings(competitionId),
+    getFixturesEnriched(competitionId),
+  ]);
+
+  const entrantNameMap = new Map<string, string>();
+  for (const e of entrants) {
+    const name =
+      e.subject?.kind === "team"
+        ? e.subject.team.name
+        : e.subject?.kind === "player"
+          ? e.subject.player.displayName
+          : "Unknown";
+    entrantNameMap.set(e.entrant.id, name);
+  }
+
+  return (
+    <>
+      <section>
+        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-white/60">
+          Standings
+        </h2>
+        {standings.success ? (
+          <StandingsTable rows={standings.data.rows} entrantNames={entrantNameMap} />
+        ) : (
+          <div className="rounded-xl border border-dashed border-white/15 bg-surface-1/50 p-6 text-center text-xs text-white/50">
+            {standings.error}
+          </div>
+        )}
+      </section>
+      <section>
+        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-white/60">
+          Fixtures
+        </h2>
+        <FixtureList
+          competitionId={competitionId}
+          fixtures={fixtures}
+          entrantNames={entrantNameMap}
+        />
+      </section>
+    </>
+  );
+}
 
 export default async function CompetitionDetailPage({
   params,
@@ -45,16 +101,9 @@ export default async function CompetitionDetailPage({
 
   const isManagerOrOwner = staff?.role === "manager" || staff?.role === "owner";
 
-  // Fetch results for every match by joining the existing mock/real layer.
-  // We embed the results directly from the module data source to keep things
-  // simple — in real mode this becomes a single batched query.
-  const results: MatchResult[] = [];
-  for (const m of matches) {
-    const res = await import("@/competitions/data/match-results").then((mod) =>
-      mod.getResult(m.id)
-    );
-    if (res) results.push(res);
-  }
+  // Batch-load every result for the competition in one query (was a per-match
+  // dynamic import loop pre-S23).
+  const results = await listResultsForCompetition(params.id);
 
   const activeEntrantCount = entrants.filter(
     (e) => e.entrant.status === "active"
@@ -195,32 +244,51 @@ export default async function CompetitionDetailPage({
         </section>
       )}
 
-      {competition.status === "in_progress" && isManagerOrOwner && (
-        <section className="rounded-xl border border-white/10 bg-surface-1/70 p-4">
-          <p className="mb-2 text-[10px] uppercase tracking-wider text-white/40">
-            Manager controls
-          </p>
-          <PublishBracketButton
-            competitionId={competition.id}
-            canPublish={false}
-            canClear={true}
-            entrantCount={activeEntrantCount}
+      {competition.status === "in_progress" &&
+        competition.kind === "tournament" &&
+        viewerEntrant !== null && (
+          <section className="rounded-xl border border-white/10 bg-surface-1/70 p-4">
+            <p className="mb-2 text-[10px] uppercase tracking-wider text-white/40">
+              Your entry
+            </p>
+            <WithdrawButton competitionId={competition.id} />
+          </section>
+        )}
+
+      {competition.status === "in_progress" &&
+        competition.kind === "tournament" &&
+        isManagerOrOwner && (
+          <section className="rounded-xl border border-white/10 bg-surface-1/70 p-4">
+            <p className="mb-2 text-[10px] uppercase tracking-wider text-white/40">
+              Manager controls
+            </p>
+            <PublishBracketButton
+              competitionId={competition.id}
+              canPublish={false}
+              canClear={true}
+              entrantCount={activeEntrantCount}
+            />
+          </section>
+        )}
+
+      {competition.kind === "tournament" && (
+        <section>
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-white/60">
+            Bracket
+          </h2>
+          <Bracket
+            matches={matches}
+            entrants={entrants}
+            results={results}
+            currentEntrantId={viewerEntrant?.entrant.id ?? null}
+            showManagerControls={isManagerOrOwner}
           />
         </section>
       )}
 
-      <section>
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-white/60">
-          Bracket
-        </h2>
-        <Bracket
-          matches={matches}
-          entrants={entrants}
-          results={results}
-          currentEntrantId={viewerEntrant?.entrant.id ?? null}
-          showManagerControls={isManagerOrOwner}
-        />
-      </section>
+      {competition.kind === "league" && (
+        <LeagueSections competitionId={competition.id} entrants={entrants} />
+      )}
 
       <section>
         <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/60">

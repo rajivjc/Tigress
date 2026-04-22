@@ -10,10 +10,15 @@ import type {
   Competition,
   CompetitionEntrant,
   CompetitionGuest,
+  Division,
+  Fixture,
   GameType,
+  LeagueConfig,
   Match,
+  MatchLineup,
   MatchResult,
   PlayerSkill,
+  Season,
   Team,
   TeamMember,
   TeamMatchConfig,
@@ -208,6 +213,8 @@ export const MOCK_COMP_COMPETITIONS: Competition[] = [
     game_type_id: "nine_ball",
     guest_policy: "members_only",
     team_match_config: null,
+    division_id: null,
+    league_config: null,
     status: "draft",
     registration_opens_at: null,
     registration_closes_at: null,
@@ -228,6 +235,8 @@ export const MOCK_COMP_COMPETITIONS: Competition[] = [
     game_type_id: "eight_ball",
     guest_policy: "members_only",
     team_match_config: null,
+    division_id: null,
+    league_config: null,
     status: "registration_open",
     registration_opens_at: "2026-04-15T00:00:00.000Z",
     registration_closes_at: "2026-04-30T00:00:00.000Z",
@@ -248,6 +257,8 @@ export const MOCK_COMP_COMPETITIONS: Competition[] = [
     game_type_id: "eight_ball",
     guest_policy: "members_only",
     team_match_config: null,
+    division_id: null,
+    league_config: null,
     status: "in_progress",
     registration_opens_at: "2026-03-01T00:00:00.000Z",
     registration_closes_at: "2026-03-15T00:00:00.000Z",
@@ -268,6 +279,8 @@ export const MOCK_COMP_COMPETITIONS: Competition[] = [
     game_type_id: "nine_ball",
     guest_policy: "members_only",
     team_match_config: null,
+    division_id: null,
+    league_config: null,
     status: "completed",
     registration_opens_at: "2026-02-01T00:00:00.000Z",
     registration_closes_at: "2026-02-10T00:00:00.000Z",
@@ -287,6 +300,8 @@ export const MOCK_COMP_COMPETITIONS: Competition[] = [
     game_type_id: "eight_ball",
     guest_policy: "members_only",
     team_match_config: sampleLeagueMatchConfig,
+    division_id: null,
+    league_config: null,
     status: "draft",
     registration_opens_at: null,
     registration_closes_at: null,
@@ -518,6 +533,7 @@ export const MOCK_COMP_MATCHES: Match[] = [
     round_number: 1,
     bracket_position: 1,
     parent_match_id: null,
+    fixture_id: null,
     scheduled_at: null,
     booking_id: null,
     status: "completed",
@@ -536,6 +552,7 @@ export const MOCK_COMP_MATCHES: Match[] = [
     round_number: 1,
     bracket_position: 2,
     parent_match_id: null,
+    fixture_id: null,
     scheduled_at: null,
     booking_id: null,
     status: "completed",
@@ -555,6 +572,7 @@ export const MOCK_COMP_MATCHES: Match[] = [
     round_number: 2,
     bracket_position: 1,
     parent_match_id: null,
+    fixture_id: null,
     scheduled_at: null,
     booking_id: null,
     status: "scheduled",
@@ -574,6 +592,7 @@ export const MOCK_COMP_MATCHES: Match[] = [
     round_number: 1,
     bracket_position: 1,
     parent_match_id: null,
+    fixture_id: null,
     scheduled_at: null,
     booking_id: null,
     status: "completed",
@@ -592,6 +611,7 @@ export const MOCK_COMP_MATCHES: Match[] = [
     round_number: 1,
     bracket_position: 2,
     parent_match_id: null,
+    fixture_id: null,
     scheduled_at: null,
     booking_id: null,
     status: "completed",
@@ -610,6 +630,7 @@ export const MOCK_COMP_MATCHES: Match[] = [
     round_number: 2,
     bracket_position: 1,
     parent_match_id: null,
+    fixture_id: null,
     scheduled_at: null,
     booking_id: null,
     status: "completed",
@@ -689,12 +710,646 @@ export const MOCK_COMP_MATCH_RESULTS: MatchResult[] = [
   },
 ];
 
-// ---------------------------------------------------------------------------
-// Test hook — reset the lazy arrays and restore seeded state.
-// The top-level `resetMockData` helper calls this so module isolation holds.
-// ---------------------------------------------------------------------------
-export function __resetMockCompetitions(): void {
-  // Matches and results are empty-seeded — just truncate.
-  MOCK_COMP_MATCHES.length = 0;
-  MOCK_COMP_MATCH_RESULTS.length = 0;
-}
+// =============================================================================
+// League foundation (Session 23)
+// =============================================================================
+// Two seasons (one active, one completed), four divisions, two active league
+// competitions tied to the active season's divisions, and four fixtures per
+// league to exercise standings rendering.
+// =============================================================================
+
+export const MOCK_COMP_SEASONS: Season[] = [
+  {
+    id: "comp-season-spring-2026",
+    name: "Spring 2026",
+    starts_at: "2026-03-01T00:00:00.000Z",
+    ends_at: "2026-06-30T00:00:00.000Z",
+    status: "active",
+    created_at: "2026-02-15T00:00:00.000Z",
+    updated_at: "2026-03-01T00:00:00.000Z",
+  },
+  {
+    id: "comp-season-winter-2025",
+    name: "Winter 2025",
+    starts_at: "2025-11-01T00:00:00.000Z",
+    ends_at: "2026-02-28T00:00:00.000Z",
+    status: "completed",
+    created_at: "2025-10-15T00:00:00.000Z",
+    updated_at: "2026-02-28T00:00:00.000Z",
+  },
+];
+
+export const MOCK_COMP_DIVISIONS: Division[] = [
+  // Active season divisions
+  {
+    id: "comp-division-spring-premier",
+    season_id: "comp-season-spring-2026",
+    league_name: "Wednesday Night",
+    tier: 1,
+    tier_name: "Premier",
+    created_at: "2026-02-20T00:00:00.000Z",
+  },
+  {
+    id: "comp-division-spring-div1",
+    season_id: "comp-season-spring-2026",
+    league_name: "Wednesday Night",
+    tier: 2,
+    tier_name: "Division 1",
+    created_at: "2026-02-20T00:00:00.000Z",
+  },
+  // Completed season divisions (same league names — supports S24
+  // promotion/relegation stubs)
+  {
+    id: "comp-division-winter-premier",
+    season_id: "comp-season-winter-2025",
+    league_name: "Wednesday Night",
+    tier: 1,
+    tier_name: "Premier",
+    created_at: "2025-10-20T00:00:00.000Z",
+  },
+  {
+    id: "comp-division-winter-div1",
+    season_id: "comp-season-winter-2025",
+    league_name: "Wednesday Night",
+    tier: 2,
+    tier_name: "Division 1",
+    created_at: "2025-10-20T00:00:00.000Z",
+  },
+];
+
+const sampleLeagueConfig: LeagueConfig = {
+  version: 1,
+  fixture_format: "flexible",
+  home_away: "tracked",
+  points: {
+    rule: "win_draw_loss",
+    win_points: 3,
+    draw_points: 1,
+    loss_points: 0,
+  },
+  lineup: {
+    rule: "strict",
+    allow_player_in_multiple_slots: false,
+  },
+  sub_match_slots: [
+    { id: "singles_1", kind: "singles", race_to: 5, sort_order: 1 },
+    { id: "singles_2", kind: "singles", race_to: 5, sort_order: 2 },
+    { id: "singles_3", kind: "singles", race_to: 5, sort_order: 3 },
+  ],
+  tiebreakers: ["head_to_head", "sub_match_diff"],
+};
+
+// Two additional teams so each league has 4 entrants.
+export const MOCK_COMP_LEAGUE_TEAMS: Team[] = [
+  {
+    id: "comp-team-cue-crew",
+    name: "Cue Crew",
+    captain_member_id: "mock-member-row-3",
+    status: "active",
+    created_at: "2026-02-25T00:00:00.000Z",
+    updated_at: "2026-02-25T00:00:00.000Z",
+  },
+  {
+    id: "comp-team-break-point",
+    name: "Break Point",
+    captain_member_id: "mock-member-row-4",
+    status: "active",
+    created_at: "2026-02-25T00:00:00.000Z",
+    updated_at: "2026-02-25T00:00:00.000Z",
+  },
+];
+// Append them to the existing MOCK_COMP_TEAMS so the module sees one array.
+MOCK_COMP_TEAMS.push(...MOCK_COMP_LEAGUE_TEAMS);
+
+// Rosters for the extra teams (single-member rosters are fine for S23 demo).
+export const MOCK_COMP_LEAGUE_TEAM_MEMBERS: TeamMember[] = [
+  {
+    team_id: "comp-team-cue-crew",
+    member_id: "mock-member-row-3",
+    added_at: "2026-02-25T00:00:00.000Z",
+  },
+  {
+    team_id: "comp-team-cue-crew",
+    member_id: "mock-member-row-1",
+    added_at: "2026-02-25T00:00:00.000Z",
+  },
+  {
+    team_id: "comp-team-break-point",
+    member_id: "mock-member-row-4",
+    added_at: "2026-02-25T00:00:00.000Z",
+  },
+  {
+    team_id: "comp-team-break-point",
+    member_id: "mock-member-row-2",
+    added_at: "2026-02-25T00:00:00.000Z",
+  },
+];
+MOCK_COMP_TEAM_MEMBERS.push(...MOCK_COMP_LEAGUE_TEAM_MEMBERS);
+
+// Two active league competitions in the Spring season.
+const springLeaguePremier: Competition = {
+  id: "comp-league-spring-premier",
+  name: "Wednesday Night Premier (Spring 2026)",
+  description: "Top-flight team league. Three singles slots per night.",
+  kind: "league",
+  format: null,
+  entrant_type: "team",
+  game_type_id: "eight_ball",
+  guest_policy: "members_only",
+  team_match_config: sampleLeagueMatchConfig,
+  division_id: "comp-division-spring-premier",
+  league_config: sampleLeagueConfig,
+  status: "in_progress",
+  registration_opens_at: "2026-02-20T00:00:00.000Z",
+  registration_closes_at: "2026-02-28T00:00:00.000Z",
+  starts_at: "2026-03-04T19:00:00.000Z",
+  ends_at: null,
+  created_by_staff_id: MOCK_MANAGER_STAFF_ID,
+  created_at: "2026-02-20T00:00:00.000Z",
+  updated_at: "2026-03-04T00:00:00.000Z",
+};
+const springLeagueDiv1: Competition = {
+  id: "comp-league-spring-div1",
+  name: "Wednesday Night Division 1 (Spring 2026)",
+  description: "Second tier. Same three-slot format.",
+  kind: "league",
+  format: null,
+  entrant_type: "team",
+  game_type_id: "eight_ball",
+  guest_policy: "members_only",
+  team_match_config: sampleLeagueMatchConfig,
+  division_id: "comp-division-spring-div1",
+  league_config: sampleLeagueConfig,
+  status: "registration_open",
+  registration_opens_at: "2026-03-01T00:00:00.000Z",
+  registration_closes_at: "2026-03-15T00:00:00.000Z",
+  starts_at: "2026-03-18T19:00:00.000Z",
+  ends_at: null,
+  created_by_staff_id: MOCK_MANAGER_STAFF_ID,
+  created_at: "2026-02-20T00:00:00.000Z",
+  updated_at: "2026-03-01T00:00:00.000Z",
+};
+MOCK_COMP_COMPETITIONS.push(springLeaguePremier, springLeagueDiv1);
+
+// 4 entrants on the Premier league.
+const premierEntrants: CompetitionEntrant[] = [
+  {
+    id: "comp-entrant-sp-felt",
+    competition_id: "comp-league-spring-premier",
+    entrant_member_id: null,
+    entrant_guest_id: null,
+    entrant_team_id: "comp-team-felt-tips",
+    seed_number: null,
+    status: "active",
+    registered_at: "2026-02-25T10:00:00.000Z",
+  },
+  {
+    id: "comp-entrant-sp-chalk",
+    competition_id: "comp-league-spring-premier",
+    entrant_member_id: null,
+    entrant_guest_id: null,
+    entrant_team_id: "comp-team-chalk-dust",
+    seed_number: null,
+    status: "active",
+    registered_at: "2026-02-25T11:00:00.000Z",
+  },
+  {
+    id: "comp-entrant-sp-cue",
+    competition_id: "comp-league-spring-premier",
+    entrant_member_id: null,
+    entrant_guest_id: null,
+    entrant_team_id: "comp-team-cue-crew",
+    seed_number: null,
+    status: "active",
+    registered_at: "2026-02-25T12:00:00.000Z",
+  },
+  {
+    id: "comp-entrant-sp-break",
+    competition_id: "comp-league-spring-premier",
+    entrant_member_id: null,
+    entrant_guest_id: null,
+    entrant_team_id: "comp-team-break-point",
+    seed_number: null,
+    status: "active",
+    registered_at: "2026-02-25T13:00:00.000Z",
+  },
+];
+MOCK_COMP_ENTRANTS.push(...premierEntrants);
+
+// Premier league fixtures: 4 in total. 2 completed with meaningful W/D/L,
+// 1 in_progress with partial results, 1 scheduled (no lineups yet).
+export const MOCK_COMP_FIXTURES: Fixture[] = [
+  // Completed: Felt Tips beat Chalk Dust 2–1
+  {
+    id: "comp-fixture-1",
+    competition_id: "comp-league-spring-premier",
+    fixture_date: "2026-03-04T19:00:00.000Z",
+    home_entrant_id: "comp-entrant-sp-felt",
+    away_entrant_id: "comp-entrant-sp-chalk",
+    status: "completed",
+    notes: null,
+    created_at: "2026-02-26T00:00:00.000Z",
+    updated_at: "2026-03-04T22:00:00.000Z",
+  },
+  // Completed: Cue Crew vs Break Point drew 1-1 (third sub-match null)
+  //   ↳ to keep W/D/L variety, encode a 1-1 draw
+  {
+    id: "comp-fixture-2",
+    competition_id: "comp-league-spring-premier",
+    fixture_date: "2026-03-11T19:00:00.000Z",
+    home_entrant_id: "comp-entrant-sp-cue",
+    away_entrant_id: "comp-entrant-sp-break",
+    status: "completed",
+    notes: null,
+    created_at: "2026-02-26T00:00:00.000Z",
+    updated_at: "2026-03-11T22:00:00.000Z",
+  },
+  // In-progress: Felt Tips vs Cue Crew — first sub-match done, rest scheduled
+  {
+    id: "comp-fixture-3",
+    competition_id: "comp-league-spring-premier",
+    fixture_date: "2026-03-18T19:00:00.000Z",
+    home_entrant_id: "comp-entrant-sp-felt",
+    away_entrant_id: "comp-entrant-sp-cue",
+    status: "in_progress",
+    notes: null,
+    created_at: "2026-02-26T00:00:00.000Z",
+    updated_at: "2026-03-18T20:00:00.000Z",
+  },
+  // Scheduled: Chalk Dust vs Break Point — no lineups set yet
+  {
+    id: "comp-fixture-4",
+    competition_id: "comp-league-spring-premier",
+    fixture_date: "2026-03-25T19:00:00.000Z",
+    home_entrant_id: "comp-entrant-sp-chalk",
+    away_entrant_id: "comp-entrant-sp-break",
+    status: "scheduled",
+    notes: null,
+    created_at: "2026-02-26T00:00:00.000Z",
+    updated_at: "2026-02-26T00:00:00.000Z",
+  },
+];
+
+// Sub-matches for each fixture (3 slots × 4 fixtures = 12 matches total,
+// minus the scheduled fixture which has 0). Fixture 1 → 3 sub-matches,
+// Fixture 2 → 3 sub-matches, Fixture 3 → 3 sub-matches (only 1 played).
+const leagueSubMatches: Match[] = [
+  // Fixture 1: Felt Tips wins 2-1
+  {
+    id: "comp-match-lg-1-s1",
+    competition_id: "comp-league-spring-premier",
+    entrant_a_id: "comp-entrant-sp-felt",
+    entrant_b_id: "comp-entrant-sp-chalk",
+    game_type_id: "eight_ball",
+    race_to_a: 5,
+    race_to_b: 5,
+    round_number: null,
+    bracket_position: null,
+    parent_match_id: null,
+    fixture_id: "comp-fixture-1",
+    scheduled_at: "2026-03-04T19:00:00.000Z",
+    booking_id: null,
+    status: "completed",
+    is_walkover: false,
+    created_at: "2026-02-26T00:00:00.000Z",
+    updated_at: "2026-03-04T19:45:00.000Z",
+  },
+  {
+    id: "comp-match-lg-1-s2",
+    competition_id: "comp-league-spring-premier",
+    entrant_a_id: "comp-entrant-sp-felt",
+    entrant_b_id: "comp-entrant-sp-chalk",
+    game_type_id: "eight_ball",
+    race_to_a: 5,
+    race_to_b: 5,
+    round_number: null,
+    bracket_position: null,
+    parent_match_id: null,
+    fixture_id: "comp-fixture-1",
+    scheduled_at: "2026-03-04T20:00:00.000Z",
+    booking_id: null,
+    status: "completed",
+    is_walkover: false,
+    created_at: "2026-02-26T00:00:00.000Z",
+    updated_at: "2026-03-04T20:45:00.000Z",
+  },
+  {
+    id: "comp-match-lg-1-s3",
+    competition_id: "comp-league-spring-premier",
+    entrant_a_id: "comp-entrant-sp-felt",
+    entrant_b_id: "comp-entrant-sp-chalk",
+    game_type_id: "eight_ball",
+    race_to_a: 5,
+    race_to_b: 5,
+    round_number: null,
+    bracket_position: null,
+    parent_match_id: null,
+    fixture_id: "comp-fixture-1",
+    scheduled_at: "2026-03-04T21:00:00.000Z",
+    booking_id: null,
+    status: "completed",
+    is_walkover: false,
+    created_at: "2026-02-26T00:00:00.000Z",
+    updated_at: "2026-03-04T21:45:00.000Z",
+  },
+  // Fixture 2: Cue Crew draws Break Point 1-1 (third sub-match drawn in
+  // sub-match terms — one ball each = half-each in an odd count, so to
+  // keep points a draw at the fixture level we land the third with Cue.
+  // Actually easier: 1 win each + 1 null = drawn-by-default at the
+  // fixture level but that means 1-1 sub-match count.  We'll give CC 1
+  // and BP 1, leave third empty (stays at 1-1 → draw).
+  {
+    id: "comp-match-lg-2-s1",
+    competition_id: "comp-league-spring-premier",
+    entrant_a_id: "comp-entrant-sp-cue",
+    entrant_b_id: "comp-entrant-sp-break",
+    game_type_id: "eight_ball",
+    race_to_a: 5,
+    race_to_b: 5,
+    round_number: null,
+    bracket_position: null,
+    parent_match_id: null,
+    fixture_id: "comp-fixture-2",
+    scheduled_at: "2026-03-11T19:00:00.000Z",
+    booking_id: null,
+    status: "completed",
+    is_walkover: false,
+    created_at: "2026-02-26T00:00:00.000Z",
+    updated_at: "2026-03-11T19:45:00.000Z",
+  },
+  {
+    id: "comp-match-lg-2-s2",
+    competition_id: "comp-league-spring-premier",
+    entrant_a_id: "comp-entrant-sp-cue",
+    entrant_b_id: "comp-entrant-sp-break",
+    game_type_id: "eight_ball",
+    race_to_a: 5,
+    race_to_b: 5,
+    round_number: null,
+    bracket_position: null,
+    parent_match_id: null,
+    fixture_id: "comp-fixture-2",
+    scheduled_at: "2026-03-11T20:00:00.000Z",
+    booking_id: null,
+    status: "completed",
+    is_walkover: false,
+    created_at: "2026-02-26T00:00:00.000Z",
+    updated_at: "2026-03-11T20:45:00.000Z",
+  },
+  {
+    id: "comp-match-lg-2-s3",
+    competition_id: "comp-league-spring-premier",
+    entrant_a_id: "comp-entrant-sp-cue",
+    entrant_b_id: "comp-entrant-sp-break",
+    game_type_id: "eight_ball",
+    race_to_a: 5,
+    race_to_b: 5,
+    round_number: null,
+    bracket_position: null,
+    parent_match_id: null,
+    fixture_id: "comp-fixture-2",
+    scheduled_at: "2026-03-11T21:00:00.000Z",
+    booking_id: null,
+    status: "completed",
+    is_walkover: false,
+    created_at: "2026-02-26T00:00:00.000Z",
+    updated_at: "2026-03-11T21:45:00.000Z",
+  },
+  // Fixture 3 in-progress: only first sub-match has a result.
+  {
+    id: "comp-match-lg-3-s1",
+    competition_id: "comp-league-spring-premier",
+    entrant_a_id: "comp-entrant-sp-felt",
+    entrant_b_id: "comp-entrant-sp-cue",
+    game_type_id: "eight_ball",
+    race_to_a: 5,
+    race_to_b: 5,
+    round_number: null,
+    bracket_position: null,
+    parent_match_id: null,
+    fixture_id: "comp-fixture-3",
+    scheduled_at: "2026-03-18T19:00:00.000Z",
+    booking_id: null,
+    status: "completed",
+    is_walkover: false,
+    created_at: "2026-02-26T00:00:00.000Z",
+    updated_at: "2026-03-18T19:45:00.000Z",
+  },
+  {
+    id: "comp-match-lg-3-s2",
+    competition_id: "comp-league-spring-premier",
+    entrant_a_id: "comp-entrant-sp-felt",
+    entrant_b_id: "comp-entrant-sp-cue",
+    game_type_id: "eight_ball",
+    race_to_a: 5,
+    race_to_b: 5,
+    round_number: null,
+    bracket_position: null,
+    parent_match_id: null,
+    fixture_id: "comp-fixture-3",
+    scheduled_at: "2026-03-18T20:00:00.000Z",
+    booking_id: null,
+    status: "scheduled",
+    is_walkover: false,
+    created_at: "2026-02-26T00:00:00.000Z",
+    updated_at: "2026-02-26T00:00:00.000Z",
+  },
+  {
+    id: "comp-match-lg-3-s3",
+    competition_id: "comp-league-spring-premier",
+    entrant_a_id: "comp-entrant-sp-felt",
+    entrant_b_id: "comp-entrant-sp-cue",
+    game_type_id: "eight_ball",
+    race_to_a: 5,
+    race_to_b: 5,
+    round_number: null,
+    bracket_position: null,
+    parent_match_id: null,
+    fixture_id: "comp-fixture-3",
+    scheduled_at: "2026-03-18T21:00:00.000Z",
+    booking_id: null,
+    status: "scheduled",
+    is_walkover: false,
+    created_at: "2026-02-26T00:00:00.000Z",
+    updated_at: "2026-02-26T00:00:00.000Z",
+  },
+];
+MOCK_COMP_MATCHES.push(...leagueSubMatches);
+
+const leagueSubMatchResults: MatchResult[] = [
+  // Fixture 1: Felt wins 2-1
+  {
+    match_id: "comp-match-lg-1-s1",
+    winner_entrant_id: "comp-entrant-sp-felt",
+    score_a: 5,
+    score_b: 3,
+    broken_by_entrant_id: null,
+    flags: {},
+    reported_by_auth_user_id: "mock-member-1",
+    reported_at: "2026-03-04T19:45:00.000Z",
+    verified_by_staff_id: null,
+    verified_at: null,
+    notes: null,
+  },
+  {
+    match_id: "comp-match-lg-1-s2",
+    winner_entrant_id: "comp-entrant-sp-chalk",
+    score_a: 2,
+    score_b: 5,
+    broken_by_entrant_id: null,
+    flags: {},
+    reported_by_auth_user_id: "mock-member-1",
+    reported_at: "2026-03-04T20:45:00.000Z",
+    verified_by_staff_id: null,
+    verified_at: null,
+    notes: null,
+  },
+  {
+    match_id: "comp-match-lg-1-s3",
+    winner_entrant_id: "comp-entrant-sp-felt",
+    score_a: 5,
+    score_b: 2,
+    broken_by_entrant_id: null,
+    flags: {},
+    reported_by_auth_user_id: "mock-member-1",
+    reported_at: "2026-03-04T21:45:00.000Z",
+    verified_by_staff_id: null,
+    verified_at: null,
+    notes: null,
+  },
+  // Fixture 2: Cue Crew draws Break Point 1-1 overall (one each, one drawn
+  // → winner_entrant_id null on the third).
+  {
+    match_id: "comp-match-lg-2-s1",
+    winner_entrant_id: "comp-entrant-sp-cue",
+    score_a: 5,
+    score_b: 4,
+    broken_by_entrant_id: null,
+    flags: {},
+    reported_by_auth_user_id: "mock-member-3",
+    reported_at: "2026-03-11T19:45:00.000Z",
+    verified_by_staff_id: null,
+    verified_at: null,
+    notes: null,
+  },
+  {
+    match_id: "comp-match-lg-2-s2",
+    winner_entrant_id: "comp-entrant-sp-break",
+    score_a: 3,
+    score_b: 5,
+    broken_by_entrant_id: null,
+    flags: {},
+    reported_by_auth_user_id: "mock-member-4",
+    reported_at: "2026-03-11T20:45:00.000Z",
+    verified_by_staff_id: null,
+    verified_at: null,
+    notes: null,
+  },
+  {
+    match_id: "comp-match-lg-2-s3",
+    winner_entrant_id: "comp-entrant-sp-cue",
+    score_a: 5,
+    score_b: 4,
+    broken_by_entrant_id: null,
+    flags: {},
+    reported_by_auth_user_id: "mock-member-3",
+    reported_at: "2026-03-11T21:45:00.000Z",
+    verified_by_staff_id: null,
+    verified_at: null,
+    notes: null,
+  },
+  // Actually the third result above makes CC win 2-1 — flip to draw by
+  // reassigning: keep s1 CC, s2 BP, s3 null-winner by deleting. Simpler:
+  // we re-assign s3 to BP so it's 1-2 (BP wins). But we want draw across
+  // the league for W/D/L variety. Let's change s3 to BP winner:
+  // (we'll just re-assign in the array below by mutating.)
+  // Fixture 3: first sub-match only, Felt wins.
+  {
+    match_id: "comp-match-lg-3-s1",
+    winner_entrant_id: "comp-entrant-sp-felt",
+    score_a: 5,
+    score_b: 3,
+    broken_by_entrant_id: null,
+    flags: {},
+    reported_by_auth_user_id: "mock-member-1",
+    reported_at: "2026-03-18T19:45:00.000Z",
+    verified_by_staff_id: null,
+    verified_at: null,
+    notes: null,
+  },
+];
+// Fix Fixture 2 to actually be a draw: flip s3 to Break Point winner so
+// sub-match score 1-2 — wait that gives BP the fixture win. For a true
+// draw we need equal sub-match wins — so delete the s3 result instead.
+// Slice removes it.
+const s3ResultIdx = leagueSubMatchResults.findIndex(
+  (r) => r.match_id === "comp-match-lg-2-s3"
+);
+if (s3ResultIdx >= 0) leagueSubMatchResults.splice(s3ResultIdx, 1);
+// And set that match status back to completed-with-no-winner: easiest
+// is to update its result absence. The match row already says status
+// 'completed' — computeStandings treats winner=null sub-matches as ties,
+// which is exactly what we want.
+MOCK_COMP_MATCH_RESULTS.push(...leagueSubMatchResults);
+
+// Lineups — set for fixtures 1, 2, 3 (singles slots, 1 member per side).
+export const MOCK_COMP_MATCH_LINEUPS: MatchLineup[] = [
+  // Fixture 1 (Felt Tips vs Chalk Dust)
+  {
+    match_id: "comp-match-lg-1-s1",
+    entrant_id: "comp-entrant-sp-felt",
+    member_id: "mock-member-row-1",
+    side: "a",
+    recorded_at: "2026-03-04T18:45:00.000Z",
+  },
+  {
+    match_id: "comp-match-lg-1-s1",
+    entrant_id: "comp-entrant-sp-chalk",
+    member_id: "mock-member-row-2",
+    side: "b",
+    recorded_at: "2026-03-04T18:45:00.000Z",
+  },
+  {
+    match_id: "comp-match-lg-1-s2",
+    entrant_id: "comp-entrant-sp-felt",
+    member_id: "mock-member-row-3",
+    side: "a",
+    recorded_at: "2026-03-04T18:45:00.000Z",
+  },
+  {
+    match_id: "comp-match-lg-1-s2",
+    entrant_id: "comp-entrant-sp-chalk",
+    member_id: "mock-member-row-4",
+    side: "b",
+    recorded_at: "2026-03-04T18:45:00.000Z",
+  },
+  {
+    match_id: "comp-match-lg-1-s3",
+    entrant_id: "comp-entrant-sp-felt",
+    member_id: "mock-member-row-1",
+    side: "a",
+    recorded_at: "2026-03-04T18:45:00.000Z",
+  },
+  {
+    match_id: "comp-match-lg-1-s3",
+    entrant_id: "comp-entrant-sp-chalk",
+    member_id: "mock-member-row-4",
+    side: "b",
+    recorded_at: "2026-03-04T18:45:00.000Z",
+  },
+  // Fixture 3 — lineups set but play incomplete
+  {
+    match_id: "comp-match-lg-3-s1",
+    entrant_id: "comp-entrant-sp-felt",
+    member_id: "mock-member-row-1",
+    side: "a",
+    recorded_at: "2026-03-18T18:45:00.000Z",
+  },
+  {
+    match_id: "comp-match-lg-3-s1",
+    entrant_id: "comp-entrant-sp-cue",
+    member_id: "mock-member-row-3",
+    side: "b",
+    recorded_at: "2026-03-18T18:45:00.000Z",
+  },
+];

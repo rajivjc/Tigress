@@ -47,6 +47,21 @@ export type MatchStatus =
 
 export type TeamStatus = "active" | "archived";
 
+export type SeasonStatus =
+  | "planned"
+  | "active"
+  | "completed"
+  | "archived";
+
+export type FixtureStatus =
+  | "scheduled"
+  | "in_progress"
+  | "completed"
+  | "postponed"
+  | "cancelled";
+
+export type LineupSide = "a" | "b";
+
 export type GameTypeId =
   | "eight_ball"
   | "nine_ball"
@@ -128,6 +143,8 @@ export interface Competition {
   game_type_id: string;
   guest_policy: CompetitionGuestPolicy;
   team_match_config: TeamMatchConfig | null;
+  division_id: string | null;
+  league_config: LeagueConfig | null;
   status: CompetitionStatus;
   registration_opens_at: string | null;
   registration_closes_at: string | null;
@@ -160,6 +177,7 @@ export interface Match {
   round_number: number | null;
   bracket_position: number | null;
   parent_match_id: string | null;
+  fixture_id: string | null;
   scheduled_at: string | null;
   booking_id: string | null;
   status: MatchStatus;
@@ -227,6 +245,72 @@ export interface EnrichedEntrant {
   subject: EntrantSubject | null;
 }
 
+// ---------- League foundation (Session 23) ----------
+
+export interface Season {
+  id: string;
+  name: string;
+  starts_at: string;
+  ends_at: string | null;
+  status: SeasonStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Division {
+  id: string;
+  season_id: string;
+  league_name: string;
+  tier: number;
+  tier_name: string;
+  created_at: string;
+}
+
+export interface Fixture {
+  id: string;
+  competition_id: string;
+  fixture_date: string;
+  home_entrant_id: string | null;
+  away_entrant_id: string | null;
+  status: FixtureStatus;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MatchLineup {
+  match_id: string;
+  entrant_id: string;
+  member_id: string;
+  side: LineupSide;
+  recorded_at: string;
+}
+
+/**
+ * League configuration. Stored as JSONB on `comp_competitions.league_config`;
+ * validation + standings engines live in `src/competitions/lib/standings.ts`.
+ * S23 implements only a narrow supported subset — other values are stored but
+ * `computeStandings` throws `LeagueConfigNotImplementedError(feature)` when
+ * asked to compute with them.
+ */
+export interface LeagueConfig {
+  version: 1;
+  fixture_format: "round_robin_single" | "round_robin_double" | "flexible";
+  home_away: "tracked" | "label_only" | "none";
+  points: {
+    rule: "win_draw_loss" | "win_loss" | "per_sub_match";
+    win_points: number;
+    draw_points: number;
+    loss_points: number;
+  };
+  lineup: {
+    rule: "strict" | "loose" | "sub_with_approval";
+    allow_player_in_multiple_slots: boolean;
+  };
+  sub_match_slots: TeamMatchSlot[];
+  tiebreakers: ("head_to_head" | "sub_match_diff" | "sub_matches_won")[];
+}
+
 // ---------- Audit events ----------
 
 export type CompAuditEventType =
@@ -251,4 +335,18 @@ export type CompAuditEventType =
   | "comp.team.roster_removed"
   | "comp.guest.created"
   | "comp.guest.archived"
-  | "comp.skill.updated";
+  | "comp.skill.updated"
+  // Session 23 — league events
+  | "comp.season.created"
+  | "comp.season.status_changed"
+  | "comp.season.archived"
+  | "comp.division.created"
+  | "comp.division.deleted"
+  | "comp.fixture.created"
+  | "comp.fixture.status_changed"
+  | "comp.fixture.cancelled"
+  | "comp.fixture.postponed"
+  | "comp.fixture.completed"
+  | "comp.lineup.set"
+  | "comp.lineup.cleared"
+  | "comp.league.created";

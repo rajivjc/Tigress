@@ -18,10 +18,16 @@ describe("competitions teams + roster data layer (mock mode)", () => {
     resetMockData();
   });
 
-  it("seeds two active teams", async () => {
+  it("seeds the active team fixtures", async () => {
     const active = await listTeams({ status: "active" });
-    expect(active.length).toBe(2);
-    expect(active.map((t) => t.name).sort()).toEqual(["Chalk Dust", "Felt Tips"]);
+    // S21 seed: Chalk Dust + Felt Tips. S23 adds Cue Crew + Break Point.
+    expect(active.length).toBe(4);
+    expect(active.map((t) => t.name).sort()).toEqual([
+      "Break Point",
+      "Chalk Dust",
+      "Cue Crew",
+      "Felt Tips",
+    ]);
   });
 
   it("creates a new team", async () => {

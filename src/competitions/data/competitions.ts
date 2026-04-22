@@ -23,6 +23,7 @@ import type {
   CompetitionGuestPolicy,
   CompetitionKind,
   CompetitionStatus,
+  LeagueConfig,
   TeamMatchConfig,
 } from "../types";
 
@@ -83,6 +84,8 @@ export interface CreateCompetitionDraftInput {
   game_type_id: string;
   guest_policy: CompetitionGuestPolicy;
   team_match_config: TeamMatchConfig | null;
+  division_id?: string | null;
+  league_config?: LeagueConfig | null;
   registration_opens_at: string | null;
   registration_closes_at: string | null;
   starts_at: string | null;
@@ -139,6 +142,8 @@ export async function createCompetitionDraft(
       game_type_id: input.game_type_id,
       guest_policy: input.guest_policy,
       team_match_config: input.team_match_config,
+      division_id: input.division_id ?? null,
+      league_config: input.league_config ?? null,
       status: "draft",
       registration_opens_at: input.registration_opens_at,
       registration_closes_at: input.registration_closes_at,
@@ -163,6 +168,8 @@ export async function createCompetitionDraft(
       game_type_id: input.game_type_id,
       guest_policy: input.guest_policy,
       team_match_config: input.team_match_config,
+      division_id: input.division_id ?? null,
+      league_config: input.league_config ?? null,
       registration_opens_at: input.registration_opens_at,
       registration_closes_at: input.registration_closes_at,
       starts_at: input.starts_at,

@@ -122,4 +122,30 @@ describe("withdrawFromTournamentAction", () => {
     expect(res.success).toBe(false);
     expect(res.error).toMatch(/ended/i);
   });
+
+  it("withdraws during in_progress, opponent advances via walkover", async () => {
+    // Use the in_progress tournament fixture. Mona (mock-member-row-1 →
+    // comp-entrant-ip-3) is one of the R2 final participants. Withdrawing
+    // her should forfeit the R2 match to Alex (comp-entrant-ip-1).
+    signInAs("mock-member-1");
+    const res = await withdrawFromTournamentAction(
+      "comp-tournament-inprogress-1"
+    );
+    expect(res.success).toBe(true);
+
+    const { listBracketMatches } = await import(
+      "@/competitions/data/bracket"
+    );
+    const { getResult } = await import(
+      "@/competitions/data/match-results"
+    );
+    const matches = await listBracketMatches(
+      "comp-tournament-inprogress-1"
+    );
+    const r2Final = matches.find((m) => m.round_number === 2)!;
+    expect(r2Final.status).toBe("completed");
+    expect(r2Final.is_walkover).toBe(true);
+    const result = await getResult(r2Final.id);
+    expect(result!.winner_entrant_id).toBe("comp-entrant-ip-1");
+  });
 });
