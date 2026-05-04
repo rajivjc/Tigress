@@ -26,7 +26,7 @@ Club management platform for a billiards venue in Singapore. NOT a POS — sits 
 - Route groups: `(auth)/` public, `(member)/` all roles, `(staff)/` staff+, `(owner)/` owner only, `(community)/` all authenticated roles (feed).
 
 ## Database
-- 10 tables, 30+ RLS policies, 3 migrations in `supabase/migrations/`.
+- ~28 tables, ~70+ RLS policies, 13 migrations in `supabase/migrations/`.
 - Credit operations use atomic RPCs (`deduct_credits`, `refund_credits`) with row-level locks.
 - `members INSERT` RLS only allows manager/owner — self-registration uses service role via API route.
 
@@ -523,6 +523,128 @@ system auto-advances the winner into the next round. The module's
   auto-posts on completion (S26 — `emitCompEvent` stays a no-op),
   scheduling integration with bookings, real-time WebSocket bracket
   updates.
+
+## League foundation (Session 23)
+
+Second playable competition format. Ships the schema, config model,
+manual fixture creation, captain lineup + result workflow, and a pure
+standings computation for the most common config (single round-robin,
+win=3/draw=1/loss=0, strict roster). The configurable league engine
+continues in S24 (schedule generator, multi-team galas,
+promotion/relegation, alternative configs).
+
+- **Migration 013** adds 5 tables: `comp_seasons`, `comp_divisions`,
+  `comp_fixtures`, `comp_fixture_participants` (schema-only stub for
+  S24 multi-team galas), `comp_match_lineups`. Plus: `comp_matches`
+  grows a nullable `fixture_id` FK; `comp_competitions` grows
+  `division_id` + `league_config` (JSONB) with two CHECK constraints
+  (`kind <> 'league' OR division_id IS NOT NULL`,
+  `kind <> 'league' OR league_config IS NOT NULL`). New RLS policies
+  include captain-set-lineup, captain-clear-lineup-pre-play, and
+  captain-report-sub-match.
+- **Module layer split (all under `src/competitions/`):**
+  - `lib/standings.ts` — pure function `computeStandings(input) →
+    StandingsRow[]`. Throws `LeagueConfigNotImplementedError(feature)`
+    on anything outside the supported config. Validator
+    `validateLeagueConfigSupported` is called both by the standings
+    engine and by `createLeagueCompetitionAction`.
+  - `data/seasons.ts`, `data/divisions.ts`, `data/fixtures.ts`,
+    `data/lineups.ts`, `data/league-standings.ts` — dual-mode data
+    layer for each new concept.
+  - `data/matches.ts` grows `createSubMatch` (pulls entrants off a
+    fixture, stamps `fixture_id` + race-to from the slot).
+  - `data/match-results.ts` grows `listResultsForCompetition` (single
+    batched query; replaces the per-match dynamic-import loop the
+    detail page used before).
+  - `actions/seasons.ts` (owner-only), `actions/divisions.ts`
+    (owner-only), `actions/fixtures.ts` (manager+),
+    `actions/lineups.ts` (captain or manager+),
+    `actions/league-results.ts` (captain or manager+; runs the
+    fixture-complete check after every report), `actions/leagues.ts`
+    (`createLeagueCompetitionAction` — validates config, rejects
+    unsupported features before persisting).
+  - `actions/results.ts` — `finalizeResult` now detects a league
+    sub-match via `fixture_id !== null` and skips the bracket-advance
+    path. Fixture completion is handled by the league-results action.
+- **Polymorphic detail page:** `/competitions/[id]` now branches on
+  `competition.kind` — tournaments keep the Bracket; leagues get a
+  Standings table + Fixture list. Leagues also get fixture subpages
+  at `/competitions/[id]/fixtures/[fixtureId]` for lineup + per-
+  sub-match result reporting.
+- **Supported config (S23):**
+  - `fixture_format: "flexible"`
+  - `home_away: "tracked" | "label_only"`
+  - `points.rule: "win_draw_loss"` (any whole-number values)
+  - `lineup.rule: "strict"`
+  - `tiebreakers: ["head_to_head", "sub_match_diff"]` (in order)
+  - Everything else is stored but throws
+    `LeagueConfigNotImplementedError(feature)` with the feature name.
+  - `defaultSupportedLeagueConfig(slots)` returns 3-1-0 with the two
+    standard tiebreakers — used by the "Use default config" button.
+- **Standings algorithm:**
+  1. Validate config (throws on unsupported).
+  2. Initialise a row per entrant.
+  3. For each completed fixture, tally sub-match wins per side;
+     compute the fixture winner / draw; award win/draw/loss points
+     and increment sub-match counters.
+  4. Sort by points desc, then each configured tiebreaker in order
+     (head-to-head: points scored between the two teams; sub-match
+     diff: aggregate `+/-`), then a stable alphabetic fall-through on
+     entrant id.
+  5. Stamp 1-based positions.
+- **Captain workflow:**
+  1. Manager creates a fixture (home + away team, date).
+  2. Manager creates sub-matches per the league's `sub_match_slots`
+     (one `comp_matches` row per slot with `fixture_id` stamped).
+  3. Each captain sets their side's lineup on each sub-match.
+  4. Either captain (or a manager) reports the sub-match result.
+  5. When every sub-match has a result, the fixture auto-flips to
+     `completed` and `emitCompEvent({ kind: "match_completed" })`
+     fires (no-op until S26).
+- **Season + division model decoupled from leagues by
+  `league_name`:** a division belongs to
+  (season, league_name, tier). `league_name` is a plain text column,
+  not a FK — "Wednesday Night" can reappear each season and S24's
+  promotion/relegation will use name reuse to wire seasons together.
+- **Sub-match linkage via `fixture_id`**, not `parent_match_id`.
+  `parent_match_id` stays reserved for match-of-matches nesting
+  (S24 team-night round shapes).
+- **Mock mode (`src/competitions/data/mock-data.ts`):** 2 seasons
+  (Spring 2026 active, Winter 2025 completed), 4 divisions (2 per
+  season, same league names so S24 tests can test name-reuse), 2
+  extra teams (Cue Crew + Break Point) plus rosters, 2 league
+  competitions in the Spring season (in_progress Premier, open Div 1),
+  4 fixtures on the Premier league (2 completed with full results +
+  lineups, 1 in_progress with partial results, 1 scheduled with no
+  lineups). Results produce meaningful W/D/L across teams so the
+  standings table renders with variety.
+- **UI entry points:**
+  - `/competitions/[id]` — polymorphic detail page.
+  - `/competitions/[id]/fixtures/[fixtureId]` — fixture detail with
+    lineup forms (captain/manager) and sub-match report buttons.
+  - `/leagues` — lists current league competitions.
+  - `/leagues/seasons` — owner admin (create + status transitions +
+    archive).
+  - `/leagues/divisions` — owner admin (create + delete, FK-restricted).
+- **Nav:** `StaffSidebar` owner section grows `Seasons` + `Divisions`
+  links (under the existing Settings / Rates entries).
+- **Audit events added:** `comp.season.created`,
+  `comp.season.status_changed`, `comp.season.archived`,
+  `comp.division.created`, `comp.division.deleted`,
+  `comp.fixture.created`, `comp.fixture.status_changed`,
+  `comp.fixture.cancelled`, `comp.fixture.postponed`,
+  `comp.fixture.completed`, `comp.lineup.set`, `comp.lineup.cleared`,
+  `comp.league.created`.
+- **Boundary:** the boundary test allowlist grew one entry
+  (`src/app/(community)/leagues/`) — the module itself remains
+  imported only through the Player adapter, audit helper, and
+  events hook.
+- **Out of scope this session:** round-robin / double-round-robin
+  schedule generator, multi-team galas (schema landed, logic in S24),
+  promotion/relegation between seasons, win_loss / per_sub_match
+  points configs, loose lineup rule + sub-with-approval, configurable
+  tiebreakers beyond the two listed, mid-season roster changes that
+  affect already-played fixtures.
 
 ### Environment variables
 

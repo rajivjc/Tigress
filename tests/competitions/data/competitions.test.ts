@@ -14,12 +14,12 @@ describe("competitions data layer (mock mode)", () => {
     resetMockData();
   });
 
-  it("seeds tournaments across the lifecycle + one draft league", async () => {
+  it("seeds tournaments + leagues across the lifecycle", async () => {
     const all = await listCompetitions();
     // S21: 1 draft tournament + 1 draft league.
-    // S22: adds 3 lifecycle-showcase tournaments (regopen, in_progress,
-    // completed) — 5 total.
-    expect(all.length).toBe(5);
+    // S22: adds 3 lifecycle-showcase tournaments — 5 total.
+    // S23: adds 2 active-season league competitions — 7 total.
+    expect(all.length).toBe(7);
     expect(all.some((c) => c.kind === "tournament")).toBe(true);
     expect(
       all.some((c) => c.kind === "league" && c.entrant_type === "team")

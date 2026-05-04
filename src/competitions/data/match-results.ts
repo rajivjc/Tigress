@@ -14,6 +14,35 @@ import {
 } from "./mock-data";
 import type { MatchResult } from "../types";
 
+/**
+ * Load every result row for a competition in one batched query. Replaces the
+ * per-match dynamic import loop the detail page used to run.
+ */
+export async function listResultsForCompetition(
+  competitionId: string
+): Promise<MatchResult[]> {
+  if (!isSupabaseConfigured()) {
+    const matchIds = new Set(
+      MOCK_COMP_MATCHES.filter((m) => m.competition_id === competitionId).map(
+        (m) => m.id
+      )
+    );
+    return MOCK_COMP_MATCH_RESULTS.filter((r) => matchIds.has(r.match_id));
+  }
+  const supabase = createClient();
+  const { data: matchRows } = await supabase
+    .from("comp_matches")
+    .select("id")
+    .eq("competition_id", competitionId);
+  const ids = ((matchRows as { id: string }[] | null) ?? []).map((r) => r.id);
+  if (ids.length === 0) return [];
+  const { data } = await supabase
+    .from("comp_match_results")
+    .select("*")
+    .in("match_id", ids);
+  return (data as MatchResult[] | null) ?? [];
+}
+
 export async function getResult(matchId: string): Promise<MatchResult | null> {
   if (!isSupabaseConfigured()) {
     return MOCK_COMP_MATCH_RESULTS.find((r) => r.match_id === matchId) ?? null;

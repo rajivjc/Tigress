@@ -7,7 +7,9 @@ import {
   Calendar,
   ClipboardCheck,
   BookOpen,
+  CalendarDays,
   History,
+  Layers,
   ListChecks,
   MessageCircle,
   Trophy,
@@ -40,6 +42,8 @@ const managerLinks: SidebarLink[] = [
 ];
 
 const ownerLinks: SidebarLink[] = [
+  { href: "/leagues/seasons", label: "Seasons", icon: CalendarDays },
+  { href: "/leagues/divisions", label: "Divisions", icon: Layers },
   { href: "/settings", label: "Settings", icon: Settings },
   { href: "/rates", label: "Rates", icon: DollarSign },
 ];

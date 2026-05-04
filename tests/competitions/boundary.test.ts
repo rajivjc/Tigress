@@ -31,6 +31,8 @@ const OUTSIDE_ALLOWLIST = [
   // S22: /competitions moved into (community) so members + staff + owner
   // share a single URL. Internal role checks gate the write actions.
   /^src\/app\/\(community\)\/competitions\//,
+  // S23: owner-facing league admin + the league listing page.
+  /^src\/app\/\(community\)\/leagues\//,
   /^src\/components\/ui\/StaffSidebar\.tsx$/,
   // Test infrastructure clones module-owned mock arrays so resetMockData()
   // can restore them between tests. Not production code — wouldn't travel
