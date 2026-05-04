@@ -52,6 +52,7 @@ import {
   MOCK_COMP_MATCH_LINEUPS,
   MOCK_COMP_MATCH_RESULTS,
   MOCK_COMP_PLAYER_SKILLS,
+  MOCK_COMP_PROMOTION_DECISIONS,
   MOCK_COMP_SEASONS,
   MOCK_COMP_TEAMS,
   MOCK_COMP_TEAM_MEMBERS,
@@ -68,6 +69,7 @@ import type {
   MatchLineup,
   MatchResult,
   PlayerSkill,
+  PromotionDecision,
   Season,
   Team,
   TeamMember,
@@ -114,6 +116,9 @@ const initialCompFixturePairings: FixturePairing[] = clone(
 const initialCompFixtureParticipants: { fixture_id: string; entrant_id: string }[] =
   clone(MOCK_COMP_FIXTURE_PARTICIPANTS);
 const initialCompLineups: MatchLineup[] = clone(MOCK_COMP_MATCH_LINEUPS);
+const initialCompPromotionDecisions: PromotionDecision[] = clone(
+  MOCK_COMP_PROMOTION_DECISIONS
+);
 
 function replaceArray<T>(target: T[], source: T[]): void {
   target.length = 0;
@@ -151,6 +156,7 @@ export function resetMockData(): void {
   replaceArray(MOCK_COMP_FIXTURE_PAIRINGS, initialCompFixturePairings);
   replaceArray(MOCK_COMP_FIXTURE_PARTICIPANTS, initialCompFixtureParticipants);
   replaceArray(MOCK_COMP_MATCH_LINEUPS, initialCompLineups);
+  replaceArray(MOCK_COMP_PROMOTION_DECISIONS, initialCompPromotionDecisions);
   // Lazy-created instances are always cleared — they rebuild on first access.
   MOCK_CHECKLIST_INSTANCES.length = 0;
   MOCK_CHECKLIST_INSTANCE_ITEMS.length = 0;

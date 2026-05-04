@@ -6,6 +6,10 @@ import {
   createDivisionAction,
   deleteDivisionAction,
 } from "../actions/divisions";
+import {
+  setDivisionPromoteCountAction,
+  setDivisionRelegateCountAction,
+} from "../actions/promotion";
 import type { Division, Season } from "../types";
 
 export function DivisionsAdmin({
@@ -118,25 +122,100 @@ export function DivisionsAdmin({
 
       <ul className="divide-y divide-white/10 overflow-hidden rounded-xl border border-white/10 bg-surface-1/70">
         {divisions.map((d) => (
-          <li key={d.id} className="flex items-center justify-between px-4 py-3">
-            <div>
-              <p className="text-sm font-medium text-white">
-                {d.league_name} · {d.tier_name} (tier {d.tier})
-              </p>
-              <p className="mt-0.5 text-[11px] text-white/50">
-                {seasonMap.get(d.season_id)?.name ?? "—"}
-              </p>
+          <li key={d.id} className="space-y-2 px-4 py-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-white">
+                  {d.league_name} · {d.tier_name} (tier {d.tier})
+                </p>
+                <p className="mt-0.5 text-[11px] text-white/50">
+                  {seasonMap.get(d.season_id)?.name ?? "—"}
+                </p>
+              </div>
+              <button
+                onClick={() => del(d.id)}
+                disabled={pending}
+                className="rounded border border-white/10 px-2 py-1 text-[11px] text-white/60 hover:bg-surface-2"
+              >
+                Delete
+              </button>
             </div>
-            <button
-              onClick={() => del(d.id)}
-              disabled={pending}
-              className="rounded border border-white/10 px-2 py-1 text-[11px] text-white/60 hover:bg-surface-2"
-            >
-              Delete
-            </button>
+            <PromoteRelegateInputs division={d} pending={pending} />
           </li>
         ))}
       </ul>
     </div>
+  );
+}
+
+function PromoteRelegateInputs({
+  division,
+  pending,
+}: {
+  division: Division;
+  pending: boolean;
+}) {
+  const router = useRouter();
+  const [promote, setPromote] = useState<number>(division.promote_count);
+  const [relegate, setRelegate] = useState<number>(division.relegate_count);
+  const finalized = division.promotions_finalized_at !== null;
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const p = await setDivisionPromoteCountAction(division.id, promote);
+    if (!p.success) {
+      alert(p.error ?? "Failed to update promote count");
+      return;
+    }
+    const r = await setDivisionRelegateCountAction(division.id, relegate);
+    if (!r.success) {
+      alert(r.error ?? "Failed to update relegate count");
+      return;
+    }
+    router.refresh();
+  };
+
+  return (
+    <form
+      onSubmit={submit}
+      className="flex flex-wrap items-end gap-2 text-[11px] text-white/60"
+    >
+      <label className="flex flex-col gap-0.5">
+        <span className="uppercase tracking-wider text-white/40">Promote</span>
+        <input
+          type="number"
+          min={0}
+          max={20}
+          disabled={finalized || pending}
+          value={promote}
+          onChange={(e) => setPromote(parseInt(e.target.value, 10) || 0)}
+          className="w-20 rounded border border-white/10 bg-surface-2 px-2 py-1 text-white disabled:opacity-50"
+        />
+      </label>
+      <label className="flex flex-col gap-0.5">
+        <span className="uppercase tracking-wider text-white/40">Relegate</span>
+        <input
+          type="number"
+          min={0}
+          max={20}
+          disabled={finalized || pending}
+          value={relegate}
+          onChange={(e) => setRelegate(parseInt(e.target.value, 10) || 0)}
+          className="w-20 rounded border border-white/10 bg-surface-2 px-2 py-1 text-white disabled:opacity-50"
+        />
+      </label>
+      <button
+        type="submit"
+        disabled={finalized || pending}
+        className="rounded border border-white/10 px-2 py-1 text-white/80 hover:bg-surface-2 disabled:opacity-50"
+      >
+        Save counts
+      </button>
+      {finalized && (
+        <span className="text-amber-300/70">
+          Finalized {new Date(division.promotions_finalized_at!).toLocaleDateString()}
+        </span>
+      )}
+    </form>
   );
 }

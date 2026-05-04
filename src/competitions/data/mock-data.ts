@@ -19,6 +19,7 @@ import type {
   MatchLineup,
   MatchResult,
   PlayerSkill,
+  PromotionDecision,
   Season,
   Team,
   TeamMember,
@@ -732,6 +733,7 @@ export const MOCK_COMP_SEASONS: Season[] = [
     starts_at: "2026-03-01T00:00:00.000Z",
     ends_at: "2026-06-30T00:00:00.000Z",
     status: "active",
+    next_season_id: null,
     created_at: "2026-02-15T00:00:00.000Z",
     updated_at: "2026-03-01T00:00:00.000Z",
   },
@@ -741,6 +743,7 @@ export const MOCK_COMP_SEASONS: Season[] = [
     starts_at: "2025-11-01T00:00:00.000Z",
     ends_at: "2026-02-28T00:00:00.000Z",
     status: "completed",
+    next_season_id: "comp-season-spring-2026",
     created_at: "2025-10-15T00:00:00.000Z",
     updated_at: "2026-02-28T00:00:00.000Z",
   },
@@ -754,6 +757,10 @@ export const MOCK_COMP_DIVISIONS: Division[] = [
     league_name: "Wednesday Night",
     tier: 1,
     tier_name: "Premier",
+    promote_count: 0,
+    relegate_count: 1,
+    promotions_finalized_at: null,
+    promotions_finalized_by: null,
     created_at: "2026-02-20T00:00:00.000Z",
   },
   {
@@ -762,6 +769,10 @@ export const MOCK_COMP_DIVISIONS: Division[] = [
     league_name: "Wednesday Night",
     tier: 2,
     tier_name: "Division 1",
+    promote_count: 1,
+    relegate_count: 0,
+    promotions_finalized_at: null,
+    promotions_finalized_by: null,
     created_at: "2026-02-20T00:00:00.000Z",
   },
   // Completed season divisions (same league names — supports S24
@@ -772,6 +783,10 @@ export const MOCK_COMP_DIVISIONS: Division[] = [
     league_name: "Wednesday Night",
     tier: 1,
     tier_name: "Premier",
+    promote_count: 0,
+    relegate_count: 1,
+    promotions_finalized_at: null,
+    promotions_finalized_by: null,
     created_at: "2025-10-20T00:00:00.000Z",
   },
   {
@@ -780,9 +795,16 @@ export const MOCK_COMP_DIVISIONS: Division[] = [
     league_name: "Wednesday Night",
     tier: 2,
     tier_name: "Division 1",
+    promote_count: 1,
+    relegate_count: 0,
+    promotions_finalized_at: null,
+    promotions_finalized_by: null,
     created_at: "2025-10-20T00:00:00.000Z",
   },
 ];
+
+// S24b2 — append-only audit trail for promote/relegate/stay decisions.
+export const MOCK_COMP_PROMOTION_DECISIONS: PromotionDecision[] = [];
 
 const sampleLeagueConfig: LeagueConfig = {
   version: 1,

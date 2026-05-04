@@ -256,6 +256,10 @@ export interface Season {
   starts_at: string;
   ends_at: string | null;
   status: SeasonStatus;
+  /** S24b2: explicit pointer to the next season so finalize can resolve
+   *  target divisions deterministically. Null until the owner sets it on
+   *  the season-edit form. */
+  next_season_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -266,7 +270,30 @@ export interface Division {
   league_name: string;
   tier: number;
   tier_name: string;
+  /** S24b2: how many top finishers promote to (tier - 1) at season end. */
+  promote_count: number;
+  /** S24b2: how many bottom finishers relegate to (tier + 1) at season end. */
+  relegate_count: number;
+  /** S24b2: stamped by `finalizeDivisionPromotionsAction`. Null until then. */
+  promotions_finalized_at: string | null;
+  promotions_finalized_by: string | null;
   created_at: string;
+}
+
+/** S24b2: append-only audit row for each entrant's season-end placement. */
+export interface PromotionDecision {
+  id: string;
+  source_division_id: string;
+  source_entrant_id: string;
+  source_team_id: string;
+  source_position: number;
+  target_division_id: string;
+  target_entrant_id: string;
+  decision: "promote" | "relegate" | "stay";
+  was_manual_override: boolean;
+  override_note: string | null;
+  decided_at: string;
+  decided_by_member_id: string;
 }
 
 export type FixturePairingMode = "two_team" | "gala_round_robin" | "gala_manual";
@@ -438,4 +465,9 @@ export type CompAuditEventType =
   | "comp.lineup.sub_approved"
   | "comp.lineup.sub_rejected"
   | "comp.lineup.sub_override_approved"
-  | "comp.fixture.replay_required";
+  | "comp.fixture.replay_required"
+  // Session 24b2 — promotion/relegation
+  | "comp.division.promotions_finalized"
+  | "comp.division.promote_count_updated"
+  | "comp.division.relegate_count_updated"
+  | "comp.season.next_season_set";

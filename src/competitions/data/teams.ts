@@ -46,6 +46,37 @@ export async function getTeam(id: string): Promise<Team | null> {
   return (data as Team | null) ?? null;
 }
 
+/**
+ * S24b2: batch resolver. One round trip for an arbitrary list of team ids,
+ * returned as a Map keyed by team id. Missing ids are absent from the map
+ * (caller treats them as null). Replaces the per-team `Promise.all`
+ * `getTeam` loop in `listEntrantsEnriched`, which the S22 audit flagged as
+ * the actual N+1 hit on both league and bracket detail pages.
+ */
+export async function getTeamsByIds(
+  teamIds: string[]
+): Promise<Map<string, Team>> {
+  const out = new Map<string, Team>();
+  if (teamIds.length === 0) return out;
+  const unique = Array.from(new Set(teamIds));
+
+  if (!isSupabaseConfigured()) {
+    for (const t of MOCK_COMP_TEAMS) {
+      if (unique.includes(t.id)) out.set(t.id, t);
+    }
+    return out;
+  }
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("comp_teams")
+    .select("*")
+    .in("id", unique);
+  for (const row of (data as Team[] | null) ?? []) {
+    out.set(row.id, row);
+  }
+  return out;
+}
+
 export interface CreateTeamInput {
   name: string;
   captain_member_id: string;

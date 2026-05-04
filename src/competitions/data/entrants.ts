@@ -16,7 +16,7 @@ import {
   playerRefToEntrantColumns,
   type EntrantRef,
 } from "./players";
-import { getTeam } from "./teams";
+import { getTeamsByIds } from "./teams";
 import type {
   CompetitionEntrant,
   EnrichedEntrant,
@@ -78,9 +78,9 @@ export async function listEntrantsEnriched(
 
   const playerMap = await getPlayersByRefs(playerRefs);
 
-  // Fetch teams + their captains.
-  const teams = await Promise.all(teamIds.map((id) => getTeam(id)));
-  const teamMap = new Map(teams.filter((t) => t !== null).map((t) => [t!.id, t!]));
+  // S24b2: one batched query for every team id, replacing the previous
+  // `Promise.all(teamIds.map(getTeam))` loop the S22 audit flagged.
+  const teamMap = await getTeamsByIds(teamIds);
 
   const captainRefs: PlayerRef[] = Array.from(teamMap.values()).map((t) => ({
     kind: "member",
