@@ -293,24 +293,50 @@ export async function clearLineup(
 }
 
 /**
- * S24b1: returns true if the (match, side) lineup contains any pending
- * substitution-approval rows. reportSubMatch consults this before recording
- * a result and refuses with LINEUP_PENDING_APPROVAL when set.
+ * S24b1-fix: any lineup row in 'pending' or 'rejected' state on either side
+ * blocks result reporting. Returns the most-blocking state present:
+ *   - 'pending'  if any pending row exists (system mid-approval — captain waits)
+ *   - 'rejected' if only rejected rows exist (captain must clear + resubmit)
+ *   - null       if neither
+ * The action layer surfaces each via a different error code so the captain
+ * knows whether to wait or to act.
  */
-export async function hasPendingApproval(matchId: string): Promise<boolean> {
+export type BlockingApprovalState = "pending" | "rejected" | null;
+
+export async function getBlockingApprovalState(
+  matchId: string
+): Promise<BlockingApprovalState> {
   if (!isSupabaseConfigured()) {
-    return MOCK_COMP_MATCH_LINEUPS.some(
-      (l) => l.match_id === matchId && l.approval_status === "pending"
-    );
+    let sawRejected = false;
+    for (const l of MOCK_COMP_MATCH_LINEUPS) {
+      if (l.match_id !== matchId) continue;
+      if (l.approval_status === "pending") return "pending";
+      if (l.approval_status === "rejected") sawRejected = true;
+    }
+    return sawRejected ? "rejected" : null;
   }
   const supabase = createClient();
   const { data } = await supabase
     .from("comp_match_lineups")
-    .select("match_id")
+    .select("approval_status")
     .eq("match_id", matchId)
-    .eq("approval_status", "pending")
+    .in("approval_status", ["pending", "rejected"])
+    .order("approval_status", { ascending: true })
     .limit(1);
-  return ((data as { match_id: string }[] | null) ?? []).length > 0;
+  const rows =
+    (data as { approval_status: "pending" | "rejected" }[] | null) ?? [];
+  if (rows.length === 0) return null;
+  // Order ascending: 'pending' < 'rejected' alphabetically — the LIMIT 1 row
+  // is the most-blocking present.
+  return rows[0]!.approval_status;
+}
+
+/**
+ * Backwards-compatible thin wrapper over getBlockingApprovalState. Retained
+ * for callers that only care about the pending case.
+ */
+export async function hasPendingApproval(matchId: string): Promise<boolean> {
+  return (await getBlockingApprovalState(matchId)) === "pending";
 }
 
 export interface ApproveLineupRowInput {
@@ -503,6 +529,124 @@ async function getTeamCaptain(teamId: string): Promise<string | null> {
   return (
     MOCK_COMP_TEAMS.find((t) => t.id === teamId)?.captain_member_id ?? null
   );
+}
+
+/**
+ * S24b1-fix: list every match where the given captain's OWN side has a
+ * rejected substitution waiting to be cleared and resubmitted. Mirror of
+ * `listPendingApprovalsForCaptain` but flips the side check so the rows
+ * surface to the captain who needs to act, not the one who decided.
+ */
+export interface RejectedSubstitutionRow {
+  matchId: string;
+  competitionId: string;
+  fixtureId: string | null;
+  /** Side of the rejected substitution — i.e. the captain's OWN side. */
+  subSide: LineupSide;
+  subEntrantId: string;
+  subMemberId: string;
+  rejectedByMemberId: string | null;
+  rejectedAt: string | null;
+  approvalNote: string | null;
+}
+
+export async function listRejectedSubstitutionsForCaptain(
+  captainMemberId: string,
+  competitionId?: string
+): Promise<RejectedSubstitutionRow[]> {
+  if (!isSupabaseConfigured()) {
+    const out: RejectedSubstitutionRow[] = [];
+    for (const row of MOCK_COMP_MATCH_LINEUPS) {
+      if (row.approval_status !== "rejected") continue;
+      const match = MOCK_COMP_MATCHES.find((m) => m.id === row.match_id);
+      if (!match) continue;
+      if (competitionId && match.competition_id !== competitionId) continue;
+      // Find the SAME-side entrant and check its team's captain.
+      const ownEntrantId =
+        row.side === "a" ? match.entrant_a_id : match.entrant_b_id;
+      if (!ownEntrantId) continue;
+      const ownEntrant = MOCK_COMP_ENTRANTS.find((e) => e.id === ownEntrantId);
+      if (!ownEntrant?.entrant_team_id) continue;
+      const team = await getTeamCaptain(ownEntrant.entrant_team_id);
+      if (team !== captainMemberId) continue;
+      out.push({
+        matchId: row.match_id,
+        competitionId: match.competition_id,
+        fixtureId: match.fixture_id,
+        subSide: row.side,
+        subEntrantId: row.entrant_id,
+        subMemberId: row.member_id,
+        rejectedByMemberId: row.approved_by_member_id,
+        rejectedAt: row.approved_at,
+        approvalNote: row.approval_note,
+      });
+    }
+    return out;
+  }
+  const supabase = createClient();
+  let query = supabase
+    .from("comp_match_lineups")
+    .select(
+      "match_id, entrant_id, side, member_id, approved_by_member_id, approved_at, approval_note, comp_matches!inner(competition_id, entrant_a_id, entrant_b_id, fixture_id)"
+    )
+    .eq("approval_status", "rejected");
+  if (competitionId) {
+    query = query.eq("comp_matches.competition_id", competitionId);
+  }
+  const { data } = await query;
+  type Row = {
+    match_id: string;
+    entrant_id: string;
+    side: LineupSide;
+    member_id: string;
+    approved_by_member_id: string | null;
+    approved_at: string | null;
+    approval_note: string | null;
+    comp_matches: {
+      competition_id: string;
+      entrant_a_id: string | null;
+      entrant_b_id: string | null;
+      fixture_id: string | null;
+    };
+  };
+  const rows = (data as Row[] | null) ?? [];
+  const out: RejectedSubstitutionRow[] = [];
+  for (const row of rows) {
+    const ownEntrantId =
+      row.side === "a"
+        ? row.comp_matches.entrant_a_id
+        : row.comp_matches.entrant_b_id;
+    if (!ownEntrantId) continue;
+    const { data: entrantData } = await supabase
+      .from("comp_competition_entrants")
+      .select("entrant_team_id")
+      .eq("id", ownEntrantId)
+      .maybeSingle();
+    const teamId = (entrantData as { entrant_team_id: string | null } | null)
+      ?.entrant_team_id;
+    if (!teamId) continue;
+    const { data: teamData } = await supabase
+      .from("comp_teams")
+      .select("captain_member_id")
+      .eq("id", teamId)
+      .maybeSingle();
+    const captainId =
+      (teamData as { captain_member_id: string | null } | null)
+        ?.captain_member_id ?? null;
+    if (captainId !== captainMemberId) continue;
+    out.push({
+      matchId: row.match_id,
+      competitionId: row.comp_matches.competition_id,
+      fixtureId: row.comp_matches.fixture_id,
+      subSide: row.side,
+      subEntrantId: row.entrant_id,
+      subMemberId: row.member_id,
+      rejectedByMemberId: row.approved_by_member_id,
+      rejectedAt: row.approved_at,
+      approvalNote: row.approval_note,
+    });
+  }
+  return out;
 }
 
 /** Exported for mock-mode helpers — looks up the competition for a match. */

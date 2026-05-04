@@ -1,9 +1,14 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { getCompetitionStandings } from "@/competitions/data/league-standings";
+import {
+  findReplayRequiredItems,
+  getCompetitionStandings,
+} from "@/competitions/data/league-standings";
 import {
   MOCK_COMP_COMPETITIONS,
   MOCK_COMP_MATCH_RESULTS,
 } from "@/competitions/data/mock-data";
+import type { LeagueConfig } from "@/competitions/types";
+import type { StandingsFixtureInput } from "@/competitions/lib/standings";
 import { resetMockData } from "../../helpers/reset-mock-data";
 
 const PREMIER = "comp-league-spring-premier";
@@ -52,7 +57,7 @@ describe("getCompetitionStandings — S24b1 loader", () => {
     expect(res.success).toBe(true);
     if (res.success) {
       expect(res.data.config).toBeTruthy();
-      expect(Array.isArray(res.data.replayRequiredFixtureIds)).toBe(true);
+      expect(Array.isArray(res.data.replayRequired)).toBe(true);
     }
   });
 
@@ -79,15 +84,15 @@ describe("getCompetitionStandings — S24b1 loader", () => {
     }
   });
 
-  it("replayRequiredFixtureIds empty when config is not win_loss", async () => {
+  it("replayRequired empty when config is not win_loss", async () => {
     const res = await getCompetitionStandings(PREMIER);
     expect(res.success).toBe(true);
     if (res.success) {
-      expect(res.data.replayRequiredFixtureIds).toEqual([]);
+      expect(res.data.replayRequired).toEqual([]);
     }
   });
 
-  it("replayRequiredFixtureIds populated under win_loss + replay_required when fixtures tie", async () => {
+  it("replayRequired populated under win_loss + replay_required when fixtures tie", async () => {
     setLeagueConfigForTest("win_loss");
     const res = await getCompetitionStandings(PREMIER);
     expect(res.success).toBe(true);
@@ -95,7 +100,215 @@ describe("getCompetitionStandings — S24b1 loader", () => {
       // Whether any seeded fixture happens to land tied is data-dependent;
       // the contract under test is that the loader returns a defined array.
       // We verify the surface, not the specific count.
-      expect(Array.isArray(res.data.replayRequiredFixtureIds)).toBe(true);
+      expect(Array.isArray(res.data.replayRequired)).toBe(true);
     }
+  });
+});
+
+// =============================================================================
+// findReplayRequiredItems — pure pre-pass over StandingsFixtureInput[].
+// =============================================================================
+
+const REPLAY_REQUIRED_CONFIG: LeagueConfig = {
+  version: 1,
+  fixture_format: "flexible",
+  home_away: "tracked",
+  points: {
+    rule: "win_loss",
+    win_points: 2,
+    draw_points: 0,
+    loss_points: 0,
+    tied_sub_matches: "replay_required",
+  },
+  lineup: { rule: "strict", allow_player_in_multiple_slots: false },
+  sub_match_slots: [],
+  tiebreakers: ["frame_diff"],
+};
+
+const NON_REPLAY_CONFIG: LeagueConfig = {
+  ...REPLAY_REQUIRED_CONFIG,
+  points: {
+    rule: "win_draw_loss",
+    win_points: 3,
+    draw_points: 1,
+    loss_points: 0,
+  },
+};
+
+describe("findReplayRequiredItems", () => {
+  it("2-team tied fixture → kind='fixture' with entrant ids", () => {
+    const fixtures: StandingsFixtureInput[] = [
+      {
+        id: "fx-1",
+        homeEntrantId: "ent-home",
+        awayEntrantId: "ent-away",
+        status: "completed",
+        subMatches: [
+          {
+            matchId: "m-1",
+            sideA: { entrantId: "ent-home" },
+            sideB: { entrantId: "ent-away" },
+            winnerEntrantId: "ent-home",
+          },
+          {
+            matchId: "m-2",
+            sideA: { entrantId: "ent-home" },
+            sideB: { entrantId: "ent-away" },
+            winnerEntrantId: "ent-away",
+          },
+        ],
+      },
+    ];
+    const items = findReplayRequiredItems(fixtures, REPLAY_REQUIRED_CONFIG);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toEqual({
+      kind: "fixture",
+      fixtureId: "fx-1",
+      homeEntrantId: "ent-home",
+      awayEntrantId: "ent-away",
+    });
+  });
+
+  it("gala with one tied pairing → kind='pairing' for that pairing only, no fixture-level entry", () => {
+    const fixtures: StandingsFixtureInput[] = [
+      {
+        id: "fx-gala",
+        homeEntrantId: null,
+        awayEntrantId: null,
+        status: "completed",
+        subMatches: [],
+        pairings: [
+          {
+            pairingId: "pair-1",
+            homeEntrantId: "ent-a",
+            awayEntrantId: "ent-b",
+            // tied 1-1
+            subMatches: [
+              {
+                matchId: "m-1",
+                sideA: { entrantId: "ent-a" },
+                sideB: { entrantId: "ent-b" },
+                winnerEntrantId: "ent-a",
+              },
+              {
+                matchId: "m-2",
+                sideA: { entrantId: "ent-a" },
+                sideB: { entrantId: "ent-b" },
+                winnerEntrantId: "ent-b",
+              },
+            ],
+          },
+          {
+            pairingId: "pair-2",
+            homeEntrantId: "ent-c",
+            awayEntrantId: "ent-d",
+            // not tied
+            subMatches: [
+              {
+                matchId: "m-3",
+                sideA: { entrantId: "ent-c" },
+                sideB: { entrantId: "ent-d" },
+                winnerEntrantId: "ent-c",
+              },
+            ],
+          },
+        ],
+      },
+    ];
+    const items = findReplayRequiredItems(fixtures, REPLAY_REQUIRED_CONFIG);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toEqual({
+      kind: "pairing",
+      fixtureId: "fx-gala",
+      pairingId: "pair-1",
+      homeEntrantId: "ent-a",
+      awayEntrantId: "ent-b",
+    });
+    // No fixture-level row for the gala.
+    expect(items.some((i) => i.kind === "fixture")).toBe(false);
+  });
+
+  it("gala with multiple tied pairings → one entry per tied pairing", () => {
+    const fixtures: StandingsFixtureInput[] = [
+      {
+        id: "fx-gala",
+        homeEntrantId: null,
+        awayEntrantId: null,
+        status: "completed",
+        subMatches: [],
+        pairings: [
+          {
+            pairingId: "pair-1",
+            homeEntrantId: "ent-a",
+            awayEntrantId: "ent-b",
+            subMatches: [
+              {
+                matchId: "m-1",
+                sideA: { entrantId: "ent-a" },
+                sideB: { entrantId: "ent-b" },
+                winnerEntrantId: "ent-a",
+              },
+              {
+                matchId: "m-2",
+                sideA: { entrantId: "ent-a" },
+                sideB: { entrantId: "ent-b" },
+                winnerEntrantId: "ent-b",
+              },
+            ],
+          },
+          {
+            pairingId: "pair-2",
+            homeEntrantId: "ent-c",
+            awayEntrantId: "ent-d",
+            subMatches: [
+              {
+                matchId: "m-3",
+                sideA: { entrantId: "ent-c" },
+                sideB: { entrantId: "ent-d" },
+                winnerEntrantId: "ent-c",
+              },
+              {
+                matchId: "m-4",
+                sideA: { entrantId: "ent-c" },
+                sideB: { entrantId: "ent-d" },
+                winnerEntrantId: "ent-d",
+              },
+            ],
+          },
+        ],
+      },
+    ];
+    const items = findReplayRequiredItems(fixtures, REPLAY_REQUIRED_CONFIG);
+    expect(items).toHaveLength(2);
+    expect(items.every((i) => i.kind === "pairing")).toBe(true);
+    const pairingIds = items.map((i) => i.kind === "pairing" && i.pairingId);
+    expect(pairingIds).toContain("pair-1");
+    expect(pairingIds).toContain("pair-2");
+  });
+
+  it("non-replay_required configs return empty array", () => {
+    const fixtures: StandingsFixtureInput[] = [
+      {
+        id: "fx-1",
+        homeEntrantId: "ent-home",
+        awayEntrantId: "ent-away",
+        status: "completed",
+        subMatches: [
+          {
+            matchId: "m-1",
+            sideA: { entrantId: "ent-home" },
+            sideB: { entrantId: "ent-away" },
+            winnerEntrantId: "ent-home",
+          },
+          {
+            matchId: "m-2",
+            sideA: { entrantId: "ent-home" },
+            sideB: { entrantId: "ent-away" },
+            winnerEntrantId: "ent-away",
+          },
+        ],
+      },
+    ];
+    expect(findReplayRequiredItems(fixtures, NON_REPLAY_CONFIG)).toEqual([]);
   });
 });

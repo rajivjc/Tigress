@@ -20,6 +20,7 @@ import { RegistrationButton } from "@/competitions/components/RegistrationButton
 import { WithdrawButton } from "@/competitions/components/WithdrawButton";
 import { PublishBracketButton } from "@/competitions/components/PublishBracketButton";
 import { PendingApprovalsList } from "@/competitions/components/PendingApprovalsList";
+import { RejectedSubstitutionsList } from "@/competitions/components/RejectedSubstitutionsList";
 
 export const dynamic = "force-dynamic";
 
@@ -78,11 +79,24 @@ async function LeagueSections({
         </h2>
         {standings.success ? (
           <div className="space-y-3">
-            {standings.data.replayRequiredFixtureIds.length > 0 && (
+            {standings.data.replayRequired.length > 0 && (
               <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-                {standings.data.replayRequiredFixtureIds.length === 1
-                  ? "1 fixture needs replay before standings are final."
-                  : `${standings.data.replayRequiredFixtureIds.length} fixtures need replay before standings are final.`}
+                <p className="font-medium">
+                  {standings.data.replayRequired.length}{" "}
+                  {standings.data.replayRequired.length === 1
+                    ? "replay"
+                    : "replays"}{" "}
+                  needed before standings are final:
+                </p>
+                <ul className="mt-1 space-y-0.5 text-amber-100/80">
+                  {standings.data.replayRequired.map((item, i) => (
+                    <li key={i}>
+                      {item.kind === "fixture"
+                        ? `Fixture ${entrantNameMap.get(item.homeEntrantId) ?? item.homeEntrantId} vs ${entrantNameMap.get(item.awayEntrantId) ?? item.awayEntrantId}`
+                        : `Gala pairing ${entrantNameMap.get(item.homeEntrantId) ?? item.homeEntrantId} vs ${entrantNameMap.get(item.awayEntrantId) ?? item.awayEntrantId}`}
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
             <StandingsTable
@@ -347,10 +361,16 @@ export default async function CompetitionDetailPage({
       {competition.kind === "league" && (
         <>
           {member !== null && (
-            <PendingApprovalsList
-              competitionId={competition.id}
-              captainMemberId={member.id}
-            />
+            <>
+              <PendingApprovalsList
+                competitionId={competition.id}
+                captainMemberId={member.id}
+              />
+              <RejectedSubstitutionsList
+                competitionId={competition.id}
+                captainMemberId={member.id}
+              />
+            </>
           )}
           <LeagueSections
             competitionId={competition.id}

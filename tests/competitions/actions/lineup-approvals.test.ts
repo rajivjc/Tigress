@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { approveLineupSubstitutionAction } from "@/competitions/actions/lineup-approvals";
-import { setLineup, getLineup } from "@/competitions/data/lineups";
+import { clearLineup, setLineup, getLineup } from "@/competitions/data/lineups";
 import { MOCK_SESSION_COOKIE } from "@/lib/auth/mock-users";
 import { __setMockCookie } from "../../stubs/next-headers";
 import { resetMockData } from "../../helpers/reset-mock-data";
@@ -247,25 +247,83 @@ describe("approveLineupSubstitutionAction", () => {
     expect(reportRes.success).toBe(true);
   });
 
-  it("rejection still blocks reportSubMatch (rejected != approved)", async () => {
+  it("rejection blocks reportSubMatch with LINEUP_REJECTED error", async () => {
     await stagePendingSubOnFeltSide();
+    // Stage the opposing side too so the only thing blocking reportSubMatch
+    // is the rejected approval state — not a missing entrant lineup.
+    await setLineup({
+      matchId: MATCH_ID,
+      side: "b",
+      memberIds: ["mock-member-row-3"],
+      slotKind: "singles",
+      lineupRule: "strict",
+    });
     signInAs("mock-manager-1");
-    await approveLineupSubstitutionAction({
+    const reject = await approveLineupSubstitutionAction({
       matchId: MATCH_ID,
       entrantId: FELT_ENTRANT,
       side: "a",
       decision: "rejected",
     });
-    // After rejection, the row's approval_status is 'rejected', not
-    // 'pending', so reportSubMatch will *not* be blocked by the pending
-    // check. The captain is expected to set a new lineup with a different
-    // (or roster) player. We verify here that the row is no longer
-    // pending — which is the contract.
-    const lineup = await getLineup(MATCH_ID);
-    const row = lineup.find(
-      (l) => l.side === "a" && l.member_id === NON_ROSTER_MEMBER
+    expect(reject.success).toBe(true);
+
+    const { reportSubMatchResultAction } = await import(
+      "@/competitions/actions/league-results"
     );
-    expect(row?.approval_status).toBe("rejected");
+    const reportRes = await reportSubMatchResultAction({
+      matchId: MATCH_ID,
+      winnerEntrantId: FELT_ENTRANT,
+      scoreA: 5,
+      scoreB: 3,
+    });
+    expect(reportRes.success).toBe(false);
+    expect(reportRes.error).toMatch(/LINEUP_REJECTED/);
+  });
+
+  it("after clearing and resubmitting with a roster member, reportSubMatch succeeds", async () => {
+    // End-to-end recovery from a rejected substitution.
+    await stagePendingSubOnFeltSide();
+    await setLineup({
+      matchId: MATCH_ID,
+      side: "b",
+      memberIds: ["mock-member-row-3"],
+      slotKind: "singles",
+      lineupRule: "strict",
+    });
+    signInAs("mock-manager-1");
+
+    // Reject the staged substitute.
+    const reject = await approveLineupSubstitutionAction({
+      matchId: MATCH_ID,
+      entrantId: FELT_ENTRANT,
+      side: "a",
+      decision: "rejected",
+    });
+    expect(reject.success).toBe(true);
+
+    // Clear the rejected lineup and submit a roster member instead.
+    const cleared = await clearLineup(MATCH_ID, "a");
+    expect(cleared.success).toBe(true);
+    const reset = await setLineup({
+      matchId: MATCH_ID,
+      side: "a",
+      memberIds: ["mock-member-row-1"], // on Felt Tips roster
+      slotKind: "singles",
+      lineupRule: "sub_with_approval",
+    });
+    expect(reset.success).toBe(true);
+    expect(reset.pendingMemberIds).toEqual([]);
+
+    const { reportSubMatchResultAction } = await import(
+      "@/competitions/actions/league-results"
+    );
+    const reportRes = await reportSubMatchResultAction({
+      matchId: MATCH_ID,
+      winnerEntrantId: FELT_ENTRANT,
+      scoreA: 5,
+      scoreB: 3,
+    });
+    expect(reportRes.success).toBe(true);
   });
 
   it("subEntrantId mismatch (wrong entrant on the right side) → no pending row found", async () => {
