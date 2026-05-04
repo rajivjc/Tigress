@@ -3,7 +3,13 @@ import {
   createPairings,
   deletePairingsByFixture,
   listPairingsByFixture,
+  listPairingsByFixtureIds,
 } from "@/competitions/data/fixture-pairings";
+import {
+  MOCK_COMP_MATCHES,
+  MOCK_COMP_MATCH_LINEUPS,
+  MOCK_COMP_MATCH_RESULTS,
+} from "@/competitions/data/mock-data";
 import { resetMockData } from "../../helpers/reset-mock-data";
 
 describe("fixture-pairings data layer (mock mode)", () => {
@@ -52,5 +58,85 @@ describe("fixture-pairings data layer (mock mode)", () => {
     expect(del.success).toBe(true);
     expect(await listPairingsByFixture("fx-clear")).toEqual([]);
     expect(await listPairingsByFixture("fx-keep")).toHaveLength(1);
+  });
+
+  it("mock cascade: deleting pairings drops their matches, lineups, and results", async () => {
+    const fixtureId = "fx-cascade";
+    const created = await createPairings(fixtureId, [
+      { homeTeamId: "t-a", awayTeamId: "t-b", pairingOrder: 1 },
+    ]);
+    expect(created.success).toBe(true);
+    const pairingId = created.rows![0]!.id;
+
+    const nowIso = new Date().toISOString();
+    const matchId = "match-cascade-1";
+    MOCK_COMP_MATCHES.push({
+      id: matchId,
+      competition_id: "comp-cascade",
+      entrant_a_id: "ent-a",
+      entrant_b_id: "ent-b",
+      game_type_id: "eight_ball",
+      race_to_a: 5,
+      race_to_b: 5,
+      round_number: null,
+      bracket_position: null,
+      parent_match_id: null,
+      fixture_id: fixtureId,
+      pairing_id: pairingId,
+      scheduled_at: null,
+      booking_id: null,
+      status: "scheduled",
+      is_walkover: false,
+      created_at: nowIso,
+      updated_at: nowIso,
+    });
+    MOCK_COMP_MATCH_LINEUPS.push({
+      match_id: matchId,
+      entrant_id: "ent-a",
+      member_id: "mock-member-row-1",
+      side: "a",
+      recorded_at: nowIso,
+    });
+    MOCK_COMP_MATCH_RESULTS.push({
+      match_id: matchId,
+      winner_entrant_id: "ent-a",
+      score_a: 5,
+      score_b: 3,
+      broken_by_entrant_id: null,
+      flags: {},
+      reported_by_auth_user_id: null,
+      reported_at: nowIso,
+      verified_by_staff_id: null,
+      verified_at: null,
+      notes: null,
+    });
+
+    const del = await deletePairingsByFixture(fixtureId);
+    expect(del.success).toBe(true);
+
+    expect(MOCK_COMP_MATCHES.find((m) => m.id === matchId)).toBeUndefined();
+    expect(
+      MOCK_COMP_MATCH_LINEUPS.find((l) => l.match_id === matchId)
+    ).toBeUndefined();
+    expect(
+      MOCK_COMP_MATCH_RESULTS.find((r) => r.match_id === matchId)
+    ).toBeUndefined();
+  });
+
+  it("listPairingsByFixtureIds returns a map keyed by fixture id", async () => {
+    await createPairings("fx-1", [
+      { homeTeamId: "t-a", awayTeamId: "t-b", pairingOrder: 2 },
+      { homeTeamId: "t-c", awayTeamId: "t-d", pairingOrder: 1 },
+    ]);
+    await createPairings("fx-2", [
+      { homeTeamId: "t-e", awayTeamId: "t-f", pairingOrder: 1 },
+      { homeTeamId: "t-g", awayTeamId: "t-h", pairingOrder: 2 },
+    ]);
+    const map = await listPairingsByFixtureIds(["fx-1", "fx-2"]);
+    expect(map.size).toBe(2);
+    expect(map.get("fx-1")).toHaveLength(2);
+    expect(map.get("fx-2")).toHaveLength(2);
+    expect(map.get("fx-1")!.map((p) => p.pairing_order)).toEqual([1, 2]);
+    expect(map.get("fx-2")!.map((p) => p.pairing_order)).toEqual([1, 2]);
   });
 });

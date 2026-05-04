@@ -41,6 +41,8 @@ export type GeneratedFixture = {
   homeTeamId: string | null;
   /** Null when this entry is a bye. */
   awayTeamId: string | null;
+  /** Set when isBye is true: the team that's sitting out this round. */
+  byeTeamId: string | null;
   isBye: boolean;
   /** ISO date (UTC). Null when no cadence is supplied. */
   scheduledAt: string | null;
@@ -94,11 +96,13 @@ export function generateRoundRobin(opts: ScheduleOptions): GeneratedFixture[] {
       const bIsPhantom = bIdx === phantomIndex;
 
       if (aIsPhantom || bIsPhantom) {
-        // Bye fixture — record the round but no teams on the row.
+        // Bye fixture — the non-phantom slot identifies the team sitting out.
+        const byeIdx = aIsPhantom ? bIdx : aIdx;
         out.push({
           roundNumber: r,
           homeTeamId: null,
           awayTeamId: null,
+          byeTeamId: teams[byeIdx]!,
           isBye: true,
           scheduledAt: null,
         });
@@ -126,6 +130,7 @@ export function generateRoundRobin(opts: ScheduleOptions): GeneratedFixture[] {
         roundNumber: r,
         homeTeamId: teams[homeIdx]!,
         awayTeamId: teams[awayIdx]!,
+        byeTeamId: null,
         isBye: false,
         scheduledAt: null,
       });
@@ -141,6 +146,7 @@ export function generateRoundRobin(opts: ScheduleOptions): GeneratedFixture[] {
         roundNumber: fx.roundNumber + roundsPerCycle,
         homeTeamId: fx.awayTeamId,
         awayTeamId: fx.homeTeamId,
+        byeTeamId: fx.byeTeamId,
         isBye: fx.isBye,
         scheduledAt: null,
       });

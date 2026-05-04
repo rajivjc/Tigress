@@ -32,14 +32,17 @@ export function GenerateScheduleForm({
     setMessage(null);
     startTransition(async () => {
       const cadenceVal = Number(cadenceWeeks);
+      // Append mode never carries cadence/startDate — defense-in-depth alongside
+      // the action ignoring them on its side.
+      const isAppend = mode === "append";
       const res = await generateSeasonFixtures({
         seasonId,
         divisionId,
         mode,
         rounds,
-        startDate: startDate || undefined,
+        startDate: !isAppend && startDate ? startDate : undefined,
         cadence:
-          startDate && cadenceVal > 0
+          !isAppend && startDate && cadenceVal > 0
             ? { unit: "week", value: cadenceVal }
             : undefined,
         confirmRegenerate: mode === "regenerate" ? confirmRegenerate : undefined,
@@ -87,26 +90,36 @@ export function GenerateScheduleForm({
             <option value={2}>Double (2)</option>
           </select>
         </label>
-        <label className="text-xs text-white/80">
-          Start date:&nbsp;
-          <input
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="rounded border border-white/10 bg-surface-2 px-2 py-1 text-white"
-          />
-        </label>
-        <label className="text-xs text-white/80">
-          Weeks/round:&nbsp;
-          <input
-            type="number"
-            min={1}
-            value={cadenceWeeks}
-            onChange={(e) => setCadenceWeeks(e.target.value)}
-            className="w-16 rounded border border-white/10 bg-surface-2 px-2 py-1 text-white"
-          />
-        </label>
+        {mode !== "append" && (
+          <>
+            <label className="text-xs text-white/80">
+              Start date:&nbsp;
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="rounded border border-white/10 bg-surface-2 px-2 py-1 text-white"
+              />
+            </label>
+            <label className="text-xs text-white/80">
+              Weeks/round:&nbsp;
+              <input
+                type="number"
+                min={1}
+                value={cadenceWeeks}
+                onChange={(e) => setCadenceWeeks(e.target.value)}
+                className="w-16 rounded border border-white/10 bg-surface-2 px-2 py-1 text-white"
+              />
+            </label>
+          </>
+        )}
       </div>
+      {mode === "append" && (
+        <p className="text-[11px] text-white/50">
+          Append generates only the pairings that don&apos;t yet exist; cadence
+          and start date don&apos;t apply.
+        </p>
+      )}
       {mode === "regenerate" && (
         <label className="flex items-center gap-2 text-xs text-rose-300">
           <input

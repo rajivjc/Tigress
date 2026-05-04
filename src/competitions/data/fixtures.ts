@@ -123,6 +123,7 @@ export async function createFixture(
       notes: input.notes ?? null,
       round_number: null,
       is_bye: false,
+      bye_entrant_id: null,
       pairing_mode: "two_team",
       created_at: nowIso,
       updated_at: nowIso,
@@ -309,6 +310,10 @@ export interface BulkCreateFixtureInput {
   /** Pre-resolved entrant ids — the action passes the team→entrant mapping. */
   homeEntrantId: string | null;
   awayEntrantId: string | null;
+  /** Resolved from `generated.byeTeamId` via the same team→entrant map.
+   *  Required when `generated.isBye` is true so the UI can render the team
+   *  sitting out instead of "TBD". Null on non-bye rows. */
+  byeEntrantId: string | null;
 }
 
 export async function bulkCreateFixtures(
@@ -329,6 +334,7 @@ export async function bulkCreateFixtures(
       notes: null,
       round_number: r.generated.roundNumber,
       is_bye: r.generated.isBye,
+      bye_entrant_id: r.byeEntrantId,
       pairing_mode: "two_team",
       created_at: nowIso,
       updated_at: nowIso,
@@ -346,6 +352,7 @@ export async function bulkCreateFixtures(
     away_entrant_id: r.awayEntrantId,
     round_number: r.generated.roundNumber,
     is_bye: r.generated.isBye,
+    bye_entrant_id: r.byeEntrantId,
     pairing_mode: "two_team",
   }));
   const { data, error } = await supabase
@@ -475,6 +482,7 @@ export async function createGalaFixture(
       notes: input.notes ?? null,
       round_number: null,
       is_bye: false,
+      bye_entrant_id: null,
       pairing_mode: input.pairing_mode,
       created_at: nowIso,
       updated_at: nowIso,

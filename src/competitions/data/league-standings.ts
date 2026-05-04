@@ -9,7 +9,7 @@
 import "server-only";
 import { listEntrants } from "./entrants";
 import { getFixturesEnriched } from "./fixtures";
-import { listPairingsByFixture } from "./fixture-pairings";
+import { listPairingsByFixtureIds } from "./fixture-pairings";
 import { getCompetition } from "./competitions";
 import {
   computeStandings,
@@ -52,12 +52,7 @@ export async function getCompetitionStandings(
   const galaFixtureIds = fixtures
     .filter((fx) => fx.fixture.pairing_mode !== "two_team")
     .map((fx) => fx.fixture.id);
-  const pairingsByFixture = new Map<string, Awaited<ReturnType<typeof listPairingsByFixture>>>();
-  await Promise.all(
-    galaFixtureIds.map(async (fid) => {
-      pairingsByFixture.set(fid, await listPairingsByFixture(fid));
-    })
-  );
+  const pairingsByFixture = await listPairingsByFixtureIds(galaFixtureIds);
 
   const fixtureInputs: StandingsFixtureInput[] = fixtures.map((fx) => {
     const subMatches: StandingsSubMatchInput[] = fx.subMatches

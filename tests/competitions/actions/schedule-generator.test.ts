@@ -178,4 +178,117 @@ describe("generateSeasonFixtures action", () => {
     });
     expect(res.success).toBe(false);
   });
+
+  it("append: with no existing fixtures, generates a full RR", async () => {
+    seedDiv1Teams();
+    signInAs("mock-manager-1");
+    const res = await generateSeasonFixtures({
+      seasonId: SEASON,
+      divisionId: DIV1,
+      mode: "append",
+      rounds: 1,
+    });
+    expect(res.success).toBe(true);
+    if (res.success) expect(res.generated).toBe(6);
+    const fixtures = await listFixtures({ competitionId: DIV1_LEAGUE });
+    expect(fixtures).toHaveLength(6);
+  });
+
+  it("append: with a complete single RR already present, generates 0 fixtures", async () => {
+    seedDiv1Teams();
+    signInAs("mock-manager-1");
+    const first = await generateSeasonFixtures({
+      seasonId: SEASON,
+      divisionId: DIV1,
+      mode: "empty",
+      rounds: 1,
+    });
+    expect(first.success).toBe(true);
+    const second = await generateSeasonFixtures({
+      seasonId: SEASON,
+      divisionId: DIV1,
+      mode: "append",
+      rounds: 1,
+    });
+    expect(second.success).toBe(true);
+    if (second.success) expect(second.generated).toBe(0);
+    const fixtures = await listFixtures({ competitionId: DIV1_LEAGUE });
+    expect(fixtures).toHaveLength(6);
+  });
+
+  it("append: late-joining team gets exactly its missing pairings, with new round numbers continuing past the existing max", async () => {
+    seedDiv1Teams();
+    signInAs("mock-manager-1");
+    const seedRes = await generateSeasonFixtures({
+      seasonId: SEASON,
+      divisionId: DIV1,
+      mode: "empty",
+      rounds: 1,
+    });
+    expect(seedRes.success).toBe(true);
+    const initial = await listFixtures({ competitionId: DIV1_LEAGUE });
+    expect(initial).toHaveLength(6);
+    const initialMaxRound = Math.max(
+      ...initial.map((f) => f.round_number ?? 0)
+    );
+    expect(initialMaxRound).toBe(3);
+
+    // Add 5th team entrant.
+    const now = new Date().toISOString();
+    MOCK_COMP_ENTRANTS.push({
+      id: "comp-entrant-d1-5",
+      competition_id: DIV1_LEAGUE,
+      entrant_member_id: null,
+      entrant_guest_id: null,
+      entrant_team_id: "comp-team-felt-tips", // any active team — re-use to avoid seeding a new one; test below relies on count not identity
+      seed_number: null,
+      status: "active",
+      registered_at: now,
+    });
+    // Replace the duplicated team with a fresh one so the late-joiner is
+    // genuinely new. comp-team-cue-crew/break-point/felt-tips/chalk-dust
+    // are already there; introduce a fifth, real, distinct team.
+    MOCK_COMP_ENTRANTS.pop();
+    MOCK_COMP_ENTRANTS.push({
+      id: "comp-entrant-d1-5",
+      competition_id: DIV1_LEAGUE,
+      entrant_member_id: null,
+      entrant_guest_id: null,
+      entrant_team_id: "comp-team-late-joiner",
+      seed_number: null,
+      status: "active",
+      registered_at: now,
+    });
+    MOCK_COMP_TEAMS.push({
+      id: "comp-team-late-joiner",
+      name: "Late Joiner",
+      captain_member_id: "mock-member-row-1",
+      status: "active",
+      created_at: now,
+      updated_at: now,
+    });
+
+    const res = await generateSeasonFixtures({
+      seasonId: SEASON,
+      divisionId: DIV1,
+      mode: "append",
+      rounds: 1,
+    });
+    expect(res.success).toBe(true);
+    if (res.success) expect(res.generated).toBe(4);
+
+    const fixtures = await listFixtures({ competitionId: DIV1_LEAGUE });
+    expect(fixtures).toHaveLength(10);
+
+    const newFixtures = fixtures.filter(
+      (f) =>
+        f.home_entrant_id === "comp-entrant-d1-5" ||
+        f.away_entrant_id === "comp-entrant-d1-5"
+    );
+    expect(newFixtures).toHaveLength(4);
+    const newRounds = newFixtures
+      .map((f) => f.round_number ?? -1)
+      .sort((a, b) => a - b);
+    expect(newRounds).toEqual([4, 5, 6, 7]);
+  });
 });
