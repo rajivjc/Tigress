@@ -22,17 +22,35 @@ import {
   type StandingsPairingInput,
   type StandingsSubMatchInput,
 } from "../lib/standings";
-import { writeCompAuditLog } from "../audit";
 import type { LeagueConfig } from "../types";
+
+/**
+ * Items the standings page needs to surface as "replay required". A gala
+ * is identified at the pairing level (only the affected pairing replays);
+ * a 2-team fixture is identified at the fixture level.
+ */
+export type ReplayRequiredItem =
+  | {
+      kind: "fixture";
+      fixtureId: string;
+      homeEntrantId: string;
+      awayEntrantId: string;
+    }
+  | {
+      kind: "pairing";
+      fixtureId: string;
+      pairingId: string;
+      homeEntrantId: string;
+      awayEntrantId: string;
+    };
 
 export interface CompetitionStandings {
   rows: StandingsRow[];
   config: LeagueConfig;
-  /** Fixture ids whose tied sub-match count means they don't contribute to
-   *  standings under `points.tied_sub_matches: 'replay_required'`. Only
-   *  populated when the league config uses that rule — empty array
-   *  otherwise. */
-  replayRequiredFixtureIds: string[];
+  /** Fixtures or gala pairings whose tied sub-match count means they don't
+   *  contribute to standings under `points.tied_sub_matches: 'replay_required'`.
+   *  Empty for any other config. */
+  replayRequired: ReplayRequiredItem[];
 }
 
 export async function getCompetitionStandings(
@@ -102,7 +120,12 @@ export async function getCompetitionStandings(
                 scoreB: result?.score_b,
               };
             });
-          return { homeEntrantId, awayEntrantId, subMatches: subs };
+          return {
+            pairingId: p.id,
+            homeEntrantId,
+            awayEntrantId,
+            subMatches: subs,
+          };
         })
         .filter((p): p is StandingsPairingInput => p !== null);
     }
@@ -118,24 +141,10 @@ export async function getCompetitionStandings(
     };
   });
 
-  const replayRequiredFixtureIds = findReplayRequiredFixtures(
+  const replayRequired = findReplayRequiredItems(
     fixtureInputs,
     comp.league_config
   );
-
-  // Best-effort audit trail — one row per replay-required fixture per
-  // standings load. Audit log is append-only, so a small amount of
-  // duplication is acceptable. If this becomes noisy in production a future
-  // session can add an "acknowledged" flag to the fixture and skip the
-  // audit when set.
-  for (const fixtureId of replayRequiredFixtureIds) {
-    await writeCompAuditLog(
-      "comp.fixture.replay_required",
-      fixtureId,
-      null,
-      { fixtureId, competitionId }
-    );
-  }
 
   try {
     const rows = computeStandings({
@@ -145,7 +154,7 @@ export async function getCompetitionStandings(
     });
     return {
       success: true,
-      data: { rows, config: comp.league_config, replayRequiredFixtureIds },
+      data: { rows, config: comp.league_config, replayRequired },
     };
   } catch (err) {
     return {
@@ -157,28 +166,25 @@ export async function getCompetitionStandings(
 
 /**
  * Pre-pass for `points.rule === 'win_loss'` with
- * `tied_sub_matches === 'replay_required'`. Returns every fixture that has
- * an equal number of sub-match wins on each side — under that rule those
- * fixtures contribute nothing and need to be replayed before standings can
- * be considered final. Returns an empty array for any other config.
+ * `tied_sub_matches === 'replay_required'`. For 2-team fixtures returns one
+ * fixture-level entry per tied fixture; for galas returns one pairing-level
+ * entry per tied pairing (no fixture-level row). The pure standings function
+ * separately skips the affected fixtures/pairings — this list is purely for
+ * surfacing what the manager needs to replay.
  */
-function findReplayRequiredFixtures(
+export function findReplayRequiredItems(
   fixtures: StandingsFixtureInput[],
   config: LeagueConfig
-): string[] {
+): ReplayRequiredItem[] {
   if (config.points.rule !== "win_loss") return [];
   if (config.points.tied_sub_matches !== "replay_required") return [];
 
-  const out: string[] = [];
+  const out: ReplayRequiredItem[] = [];
   for (const fx of fixtures) {
     if (fx.status !== "completed") continue;
     if (fx.isBye) continue;
     if (fx.pairings && fx.pairings.length > 0) {
-      // For galas, a pairing tie inside the gala still means the overall
-      // fixture has *something* needing replay — surface the fixture id so
-      // organisers know to look. The pure standings function already skips
-      // the affected pairings.
-      let hasTie = false;
+      // Galas: emit one entry per tied pairing — never a fixture-level row.
       for (const p of fx.pairings) {
         let homeWins = 0;
         let awayWins = 0;
@@ -189,12 +195,17 @@ function findReplayRequiredFixtures(
           if (sm.winnerEntrantId === p.homeEntrantId) homeWins += 1;
           else if (sm.winnerEntrantId === p.awayEntrantId) awayWins += 1;
         }
-        if (anyReported && homeWins === awayWins) {
-          hasTie = true;
-          break;
-        }
+        if (!anyReported) continue;
+        if (homeWins !== awayWins) continue;
+        if (!p.pairingId) continue;
+        out.push({
+          kind: "pairing",
+          fixtureId: fx.id,
+          pairingId: p.pairingId,
+          homeEntrantId: p.homeEntrantId,
+          awayEntrantId: p.awayEntrantId,
+        });
       }
-      if (hasTie) out.push(fx.id);
       continue;
     }
     if (fx.homeEntrantId === null || fx.awayEntrantId === null) continue;
@@ -204,7 +215,14 @@ function findReplayRequiredFixtures(
       if (sm.winnerEntrantId === fx.homeEntrantId) homeWins += 1;
       else if (sm.winnerEntrantId === fx.awayEntrantId) awayWins += 1;
     }
-    if (homeWins === awayWins) out.push(fx.id);
+    if (homeWins === awayWins) {
+      out.push({
+        kind: "fixture",
+        fixtureId: fx.id,
+        homeEntrantId: fx.homeEntrantId,
+        awayEntrantId: fx.awayEntrantId,
+      });
+    }
   }
   return out;
 }

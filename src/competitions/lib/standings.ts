@@ -61,6 +61,10 @@ export interface StandingsSubMatchInput {
  * way as a 2-team fixture — galas are simply containers of pairings.
  */
 export interface StandingsPairingInput {
+  /** S24b1-fix: pass the pairing id through so replay-required can identify
+   *  the specific pairing rather than just flagging the whole gala. The pure
+   *  standings function ignores it; only the loader's pre-pass uses it. */
+  pairingId?: string;
   homeEntrantId: string;
   awayEntrantId: string;
   subMatches: StandingsSubMatchInput[];

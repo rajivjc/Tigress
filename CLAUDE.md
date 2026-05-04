@@ -41,6 +41,22 @@ Club management platform for a billiards venue in Singapore. NOT a POS — sits 
 - All audit fixes go into the next session prompt.
 - Mock mode maintained throughout — every feature must work without Supabase.
 
+### Verification sequence (mandatory before commit)
+
+```bash
+npx tsc --noEmit
+npm run build
+npm run lint
+npx vitest run
+```
+
+All four green. `tsc --noEmit` is non-negotiable: vitest transpiles via
+esbuild without type-checking, and `next build` doesn't type-check files
+outside the app's import graph. Test files routinely escape both — only
+`tsc` catches type drift in tests. The S24b1 audit caught two type errors
+in test files that build/lint/vitest all missed; this step is what
+prevents that recurring.
+
 ## PWA (Session 14)
 Tigress is installable as a PWA. Everything is hand-written — do **not** add `next-pwa` or any SW library.
 

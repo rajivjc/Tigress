@@ -19,7 +19,7 @@ import { listEntrants } from "../data/entrants";
 import { getTeam } from "../data/teams";
 import { getFixture, updateFixtureStatus } from "../data/fixtures";
 import { recordResult } from "../data/match-results";
-import { hasPendingApproval } from "../data/lineups";
+import { getBlockingApprovalState } from "../data/lineups";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -65,13 +65,22 @@ export async function reportSubMatchResultAction(
   }
 
   // S24b1: refuse to record a result while a non-roster substitute is
-  // waiting for opposing-captain approval. The lineup data layer flags any
-  // pending row on either side of this match.
-  if (await hasPendingApproval(input.matchId)) {
+  // waiting for opposing-captain approval, or has been rejected and not yet
+  // resubmitted. The two states surface as separate error codes so the
+  // captain knows whether to wait or to clear + resubmit.
+  const blockingState = await getBlockingApprovalState(input.matchId);
+  if (blockingState === "pending") {
     return {
       success: false,
       error:
         "LINEUP_PENDING_APPROVAL: A substitute on this match is waiting for opposing-captain approval",
+    };
+  }
+  if (blockingState === "rejected") {
+    return {
+      success: false,
+      error:
+        "LINEUP_REJECTED: A substitute on this match was rejected — clear the lineup and submit a different player before reporting",
     };
   }
 

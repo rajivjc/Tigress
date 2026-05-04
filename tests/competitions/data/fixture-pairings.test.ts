@@ -96,6 +96,10 @@ describe("fixture-pairings data layer (mock mode)", () => {
       member_id: "mock-member-row-1",
       side: "a",
       recorded_at: nowIso,
+      approval_status: "not_required",
+      approved_by_member_id: null,
+      approved_at: null,
+      approval_note: null,
     });
     MOCK_COMP_MATCH_RESULTS.push({
       match_id: matchId,
