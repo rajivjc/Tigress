@@ -34,11 +34,25 @@ export interface StandingsSubMatchInput {
   winnerEntrantId: string | null;
 }
 
+/**
+ * One pairwise matchup inside a gala (S24a). Standings folds these the same
+ * way as a 2-team fixture — galas are simply containers of pairings.
+ */
+export interface StandingsPairingInput {
+  homeEntrantId: string;
+  awayEntrantId: string;
+  subMatches: StandingsSubMatchInput[];
+}
+
 export interface StandingsFixtureInput {
   id: string;
   homeEntrantId: string | null;
   awayEntrantId: string | null;
   status: FixtureStatus;
+  /** S24a: bye fixtures contribute nothing. */
+  isBye?: boolean;
+  /** S24a: gala fixtures expand into multiple pairings. */
+  pairings?: StandingsPairingInput[];
   subMatches: StandingsSubMatchInput[];
 }
 
@@ -132,22 +146,58 @@ export function computeStandings(
   const headToHead = new Map<string, number>();
   const h2hKey = (a: string, b: string) => `${a}|${b}`;
 
+  // Normalise: galas expand into pairings, byes drop, 2-team fixtures pass
+  // through. Gala pairings without ANY reported sub-match are skipped (the
+  // gala is mid-tournament and that pair simply hasn't played yet); 2-team
+  // fixtures keep their pre-S24a behaviour where a completed fixture with no
+  // recorded winners counts as a 0-0 draw.
+  type FoldablePair = {
+    homeEntrantId: string;
+    awayEntrantId: string;
+    subMatches: StandingsSubMatchInput[];
+    skipIfUnreported: boolean;
+  };
+  const foldable: FoldablePair[] = [];
   for (const fx of input.fixtures) {
     if (fx.status !== "completed") continue;
+    if (fx.isBye) continue;
+    if (fx.pairings && fx.pairings.length > 0) {
+      for (const p of fx.pairings) {
+        foldable.push({
+          homeEntrantId: p.homeEntrantId,
+          awayEntrantId: p.awayEntrantId,
+          subMatches: p.subMatches,
+          skipIfUnreported: true,
+        });
+      }
+      continue;
+    }
     if (fx.homeEntrantId === null || fx.awayEntrantId === null) continue;
-    const home = fx.homeEntrantId;
-    const away = fx.awayEntrantId;
+    foldable.push({
+      homeEntrantId: fx.homeEntrantId,
+      awayEntrantId: fx.awayEntrantId,
+      subMatches: fx.subMatches,
+      skipIfUnreported: false,
+    });
+  }
+
+  for (const pair of foldable) {
+    const home = pair.homeEntrantId;
+    const away = pair.awayEntrantId;
     const homeRow = rows.get(home);
     const awayRow = rows.get(away);
     if (!homeRow || !awayRow) continue;
 
     let homeSubWins = 0;
     let awaySubWins = 0;
-    for (const sm of fx.subMatches) {
+    let anyReported = false;
+    for (const sm of pair.subMatches) {
       if (sm.winnerEntrantId === null) continue;
+      anyReported = true;
       if (sm.winnerEntrantId === home) homeSubWins += 1;
       else if (sm.winnerEntrantId === away) awaySubWins += 1;
     }
+    if (pair.skipIfUnreported && !anyReported) continue;
 
     homeRow.played += 1;
     awayRow.played += 1;

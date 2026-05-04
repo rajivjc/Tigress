@@ -9,11 +9,13 @@
 import "server-only";
 import { listEntrants } from "./entrants";
 import { getFixturesEnriched } from "./fixtures";
+import { listPairingsByFixture } from "./fixture-pairings";
 import { getCompetition } from "./competitions";
 import {
   computeStandings,
   type StandingsRow,
   type StandingsFixtureInput,
+  type StandingsPairingInput,
   type StandingsSubMatchInput,
 } from "../lib/standings";
 import type { LeagueConfig } from "../types";
@@ -40,23 +42,69 @@ export async function getCompetitionStandings(
     getFixturesEnriched(competitionId),
   ]);
 
+  // Galas: pairings link by team_id; build a team_id → entrant_id index
+  // first so the pure standings function only ever sees entrant ids.
+  const teamToEntrant = new Map<string, string>();
+  for (const e of entrants) {
+    if (e.entrant_team_id !== null) teamToEntrant.set(e.entrant_team_id, e.id);
+  }
+
+  const galaFixtureIds = fixtures
+    .filter((fx) => fx.fixture.pairing_mode !== "two_team")
+    .map((fx) => fx.fixture.id);
+  const pairingsByFixture = new Map<string, Awaited<ReturnType<typeof listPairingsByFixture>>>();
+  await Promise.all(
+    galaFixtureIds.map(async (fid) => {
+      pairingsByFixture.set(fid, await listPairingsByFixture(fid));
+    })
+  );
+
   const fixtureInputs: StandingsFixtureInput[] = fixtures.map((fx) => {
-    const subMatches: StandingsSubMatchInput[] = fx.subMatches.map((m) => {
-      const result = fx.results.find((r) => r.match_id === m.id);
-      const aId = m.entrant_a_id;
-      const bId = m.entrant_b_id;
-      return {
-        matchId: m.id,
-        sideA: { entrantId: aId ?? "" },
-        sideB: { entrantId: bId ?? "" },
-        winnerEntrantId: result?.winner_entrant_id ?? null,
-      };
-    });
+    const subMatches: StandingsSubMatchInput[] = fx.subMatches
+      .filter((m) => m.pairing_id === null)
+      .map((m) => {
+        const result = fx.results.find((r) => r.match_id === m.id);
+        const aId = m.entrant_a_id;
+        const bId = m.entrant_b_id;
+        return {
+          matchId: m.id,
+          sideA: { entrantId: aId ?? "" },
+          sideB: { entrantId: bId ?? "" },
+          winnerEntrantId: result?.winner_entrant_id ?? null,
+        };
+      });
+
+    let pairings: StandingsPairingInput[] | undefined;
+    if (fx.fixture.pairing_mode !== "two_team") {
+      const pairingRows = pairingsByFixture.get(fx.fixture.id) ?? [];
+      pairings = pairingRows
+        .map((p) => {
+          const homeEntrantId = teamToEntrant.get(p.home_team_id) ?? "";
+          const awayEntrantId = teamToEntrant.get(p.away_team_id) ?? "";
+          if (!homeEntrantId || !awayEntrantId) return null;
+          const subs = fx.subMatches
+            .filter((m) => m.pairing_id === p.id)
+            .map((m) => {
+              const result = fx.results.find((r) => r.match_id === m.id);
+              return {
+                matchId: m.id,
+                sideA: { entrantId: homeEntrantId },
+                sideB: { entrantId: awayEntrantId },
+                winnerEntrantId: result?.winner_entrant_id ?? null,
+              };
+            });
+          return { homeEntrantId, awayEntrantId, subMatches: subs };
+        })
+        .filter((p): p is StandingsPairingInput => p !== null);
+    }
+
     return {
       id: fx.fixture.id,
       homeEntrantId: fx.fixture.home_entrant_id,
       awayEntrantId: fx.fixture.away_entrant_id,
       status: fx.fixture.status,
+      isBye: fx.fixture.is_bye,
+      pairings,
       subMatches,
     };
   });

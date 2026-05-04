@@ -10,6 +10,9 @@ import { listResultsForCompetition } from "@/competitions/data/match-results";
 import { listGameTypes } from "@/competitions/data/game-types";
 import { getCompetitionStandings } from "@/competitions/data/league-standings";
 import { getFixturesEnriched } from "@/competitions/data/fixtures";
+import { listRoster } from "@/competitions/data/team-members";
+import { getDivision } from "@/competitions/data/divisions";
+import { GenerateScheduleForm } from "@/competitions/components/GenerateScheduleForm";
 import { Bracket } from "@/competitions/components/Bracket";
 import { StandingsTable } from "@/competitions/components/StandingsTable";
 import { FixtureList } from "@/competitions/components/FixtureList";
@@ -22,9 +25,11 @@ export const dynamic = "force-dynamic";
 async function LeagueSections({
   competitionId,
   entrants,
+  viewerMemberId,
 }: {
   competitionId: string;
   entrants: Awaited<ReturnType<typeof listEntrantsEnriched>>;
+  viewerMemberId: string | null;
 }) {
   const [standings, fixtures] = await Promise.all([
     getCompetitionStandings(competitionId),
@@ -42,6 +47,20 @@ async function LeagueSections({
     entrantNameMap.set(e.entrant.id, name);
   }
 
+  // Highlight the viewer's team entrant in the standings table when they're
+  // a roster member on a team in this competition.
+  let viewerEntrantId: string | undefined;
+  if (viewerMemberId) {
+    for (const e of entrants) {
+      if (e.subject?.kind !== "team") continue;
+      const roster = await listRoster(e.subject.team.id);
+      if (roster.some((r) => r.member_id === viewerMemberId)) {
+        viewerEntrantId = e.entrant.id;
+        break;
+      }
+    }
+  }
+
   return (
     <>
       <section>
@@ -49,7 +68,11 @@ async function LeagueSections({
           Standings
         </h2>
         {standings.success ? (
-          <StandingsTable rows={standings.data.rows} entrantNames={entrantNameMap} />
+          <StandingsTable
+            rows={standings.data.rows}
+            entrantNames={entrantNameMap}
+            highlightEntrantId={viewerEntrantId}
+          />
         ) : (
           <div className="rounded-xl border border-dashed border-white/15 bg-surface-1/50 p-6 text-center text-xs text-white/50">
             {standings.error}
@@ -67,6 +90,22 @@ async function LeagueSections({
         />
       </section>
     </>
+  );
+}
+
+async function ManagerLeagueControls({ divisionId }: { divisionId: string }) {
+  const division = await getDivision(divisionId);
+  if (!division) return null;
+  return (
+    <section className="rounded-xl border border-white/10 bg-surface-1/70 p-4">
+      <p className="mb-3 text-[10px] uppercase tracking-wider text-white/40">
+        Schedule generator
+      </p>
+      <GenerateScheduleForm
+        seasonId={division.season_id}
+        divisionId={divisionId}
+      />
+    </section>
   );
 }
 
@@ -287,7 +326,16 @@ export default async function CompetitionDetailPage({
       )}
 
       {competition.kind === "league" && (
-        <LeagueSections competitionId={competition.id} entrants={entrants} />
+        <>
+          <LeagueSections
+            competitionId={competition.id}
+            entrants={entrants}
+            viewerMemberId={member?.id ?? null}
+          />
+          {isManagerOrOwner && competition.division_id && (
+            <ManagerLeagueControls divisionId={competition.division_id} />
+          )}
+        </>
       )}
 
       <section>

@@ -178,6 +178,9 @@ export interface Match {
   bracket_position: number | null;
   parent_match_id: string | null;
   fixture_id: string | null;
+  /** S24a: scopes this sub-match to a specific gala pairing. Null for
+   *  2-team fixtures. */
+  pairing_id: string | null;
   scheduled_at: string | null;
   booking_id: string | null;
   status: MatchStatus;
@@ -266,6 +269,8 @@ export interface Division {
   created_at: string;
 }
 
+export type FixturePairingMode = "two_team" | "gala_round_robin" | "gala_manual";
+
 export interface Fixture {
   id: string;
   competition_id: string;
@@ -274,8 +279,22 @@ export interface Fixture {
   away_entrant_id: string | null;
   status: FixtureStatus;
   notes: string | null;
+  /** 1-indexed round inside a generated round-robin schedule. Null for
+   *  legacy / manually created fixtures. */
+  round_number: number | null;
+  is_bye: boolean;
+  pairing_mode: FixturePairingMode;
   created_at: string;
   updated_at: string;
+}
+
+export interface FixturePairing {
+  id: string;
+  fixture_id: string;
+  home_team_id: string;
+  away_team_id: string;
+  pairing_order: number;
+  created_at: string;
 }
 
 export interface MatchLineup {
@@ -349,4 +368,9 @@ export type CompAuditEventType =
   | "comp.fixture.completed"
   | "comp.lineup.set"
   | "comp.lineup.cleared"
-  | "comp.league.created";
+  | "comp.league.created"
+  // Session 24a — schedule + gala events
+  | "comp.season.fixtures_generated"
+  | "comp.season.fixtures_regenerated"
+  | "comp.fixture.gala_created"
+  | "comp.fixture.gala_pairings_set";

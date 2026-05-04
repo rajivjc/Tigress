@@ -151,6 +151,7 @@ export async function persistBracket(
       bracket_position: spec.bracketPosition,
       parent_match_id: null,
       fixture_id: null,
+      pairing_id: null,
       scheduled_at: null,
       booking_id: null,
       status,

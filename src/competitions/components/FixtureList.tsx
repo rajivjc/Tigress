@@ -84,6 +84,7 @@ function FixtureGroup({
       <ul className="divide-y divide-white/10 overflow-hidden rounded-xl border border-white/10 bg-surface-1/70">
         {fixtures.map((enriched) => {
           const f = enriched.fixture;
+          const isGala = f.pairing_mode !== "two_team";
           const home = f.home_entrant_id
             ? entrantNames.get(f.home_entrant_id) ?? "TBD"
             : "TBD";
@@ -91,7 +92,11 @@ function FixtureGroup({
             ? entrantNames.get(f.away_entrant_id) ?? "TBD"
             : "TBD";
           let summary = "";
-          if (f.status === "completed" && enriched.subMatches.length > 0) {
+          if (
+            !isGala &&
+            f.status === "completed" &&
+            enriched.subMatches.length > 0
+          ) {
             const homeWins = enriched.subMatches.filter(
               (m) =>
                 enriched.results.find((r) => r.match_id === m.id)
@@ -104,6 +109,26 @@ function FixtureGroup({
             ).length;
             summary = `${homeWins} – ${awayWins}`;
           }
+          let label: React.ReactNode;
+          if (f.is_bye) {
+            label = (
+              <p className="text-sm text-white/70">
+                BYE <span className="text-white/40">— {home}</span>
+              </p>
+            );
+          } else if (isGala) {
+            label = (
+              <p className="text-sm text-white">
+                Gala — {f.pairing_mode.replace("gala_", "")}
+              </p>
+            );
+          } else {
+            label = (
+              <p className="text-sm text-white">
+                {home} <span className="text-white/40">vs</span> {away}
+              </p>
+            );
+          }
           return (
             <li key={f.id}>
               <Link
@@ -111,11 +136,19 @@ function FixtureGroup({
                 className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-surface-2/40"
               >
                 <div>
-                  <p className="text-sm text-white">
-                    {home} <span className="text-white/40">vs</span> {away}
-                  </p>
-                  <p className="mt-1 text-[11px] text-white/50">
-                    {new Date(f.fixture_date).toLocaleDateString()}
+                  {label}
+                  <p className="mt-1 flex items-center gap-2 text-[11px] text-white/50">
+                    {f.round_number !== null && (
+                      <span className="rounded border border-white/10 bg-surface-2/60 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-white/60">
+                        Round {f.round_number}
+                      </span>
+                    )}
+                    <span>{new Date(f.fixture_date).toLocaleDateString()}</span>
+                    {isGala && (
+                      <span className="rounded border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-accent">
+                        Gala
+                      </span>
+                    )}
                   </p>
                 </div>
                 <div className="text-right">

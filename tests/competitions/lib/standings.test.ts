@@ -339,6 +339,206 @@ describe("computeStandings", () => {
   });
 });
 
+describe("computeStandings — S24a galas + byes", () => {
+  function pairing(home: string, away: string, winners: (string | null)[]) {
+    return {
+      homeEntrantId: home,
+      awayEntrantId: away,
+      subMatches: winners.map((w, i) => ({
+        matchId: `${home}-${away}-${i}`,
+        sideA: { entrantId: home },
+        sideB: { entrantId: away },
+        winnerEntrantId: w,
+      })),
+    };
+  }
+
+  it("bye fixture contributes nothing to either team's row", () => {
+    const rows = computeStandings({
+      config: cfg(),
+      entrants: [E("a"), E("b")],
+      fixtures: [
+        {
+          id: "bye-1",
+          homeEntrantId: null,
+          awayEntrantId: null,
+          status: "completed",
+          isBye: true,
+          subMatches: [],
+        },
+        makeFixture("fx-1", "a", "b", [{ winner: "a" }]),
+      ],
+    });
+    expect(rows.find((r) => r.entrantId === "a")!.played).toBe(1);
+    expect(rows.find((r) => r.entrantId === "b")!.played).toBe(1);
+  });
+
+  it("gala fixture with 4 participants and all 6 pairings completed", () => {
+    const rows = computeStandings({
+      config: cfg(),
+      entrants: [E("a"), E("b"), E("c"), E("d")],
+      fixtures: [
+        {
+          id: "gala-1",
+          homeEntrantId: null,
+          awayEntrantId: null,
+          status: "completed",
+          subMatches: [],
+          pairings: [
+            pairing("a", "b", ["a", "a", "b"]),
+            pairing("a", "c", ["a", "a", "a"]),
+            pairing("a", "d", ["a", "d", "d"]),
+            pairing("b", "c", ["b", "c", "c"]),
+            pairing("b", "d", ["b", "b", "d"]),
+            pairing("c", "d", ["c", "c", "c"]),
+          ],
+        },
+      ],
+    });
+    const a = rows.find((r) => r.entrantId === "a")!;
+    expect(a.played).toBe(3);
+    expect(a.won).toBe(2); // beat b (2-1), beat c (3-0), lost to d (1-2)
+    expect(a.lost).toBe(1);
+    expect(a.points).toBe(6);
+    const c = rows.find((r) => r.entrantId === "c")!;
+    expect(c.played).toBe(3);
+    expect(c.won).toBe(2); // lost to a (0-3), beat b (2-1), beat d (3-0)
+  });
+
+  it("mixed regular fixtures + a gala fold into one set of standings", () => {
+    const rows = computeStandings({
+      config: cfg(),
+      entrants: [E("a"), E("b"), E("c")],
+      fixtures: [
+        makeFixture("fx-1", "a", "b", [{ winner: "a" }, { winner: "a" }]),
+        makeFixture("fx-2", "b", "c", [{ winner: "b" }, { winner: "c" }, { winner: "c" }]),
+        {
+          id: "gala-1",
+          homeEntrantId: null,
+          awayEntrantId: null,
+          status: "completed",
+          subMatches: [],
+          pairings: [
+            pairing("a", "c", ["c"]),
+            pairing("b", "a", ["a"]),
+          ],
+        },
+      ],
+    });
+    // a vs b (regular): a wins → a +3, b 0
+    // b vs c (regular): c wins → c +3, b 0
+    // gala a vs c: c wins → c +3, a 0
+    // gala b vs a: a wins → a +3, b 0
+    const a = rows.find((r) => r.entrantId === "a")!;
+    expect(a.played).toBe(3);
+    expect(a.won).toBe(2);
+    expect(a.lost).toBe(1);
+    expect(a.points).toBe(6);
+    const c = rows.find((r) => r.entrantId === "c")!;
+    expect(c.played).toBe(2);
+    expect(c.won).toBe(2);
+    expect(c.points).toBe(6);
+    const b = rows.find((r) => r.entrantId === "b")!;
+    expect(b.played).toBe(3);
+    expect(b.points).toBe(0);
+  });
+
+  it("partially-completed gala — only reported pairings contribute", () => {
+    const rows = computeStandings({
+      config: cfg(),
+      entrants: [E("a"), E("b"), E("c"), E("d")],
+      fixtures: [
+        {
+          id: "gala-1",
+          homeEntrantId: null,
+          awayEntrantId: null,
+          status: "completed",
+          subMatches: [],
+          pairings: [
+            pairing("a", "b", ["a"]),
+            pairing("a", "c", ["a"]),
+            pairing("a", "d", ["a"]),
+            // 3 pairings without any reported winner — should be ignored
+            pairing("b", "c", [null, null]),
+            pairing("b", "d", [null]),
+            pairing("c", "d", [null, null]),
+          ],
+        },
+      ],
+    });
+    const a = rows.find((r) => r.entrantId === "a")!;
+    expect(a.played).toBe(3);
+    expect(a.points).toBe(9);
+    const b = rows.find((r) => r.entrantId === "b")!;
+    expect(b.played).toBe(1); // only the loss to a
+    expect(b.lost).toBe(1);
+    const c = rows.find((r) => r.entrantId === "c")!;
+    expect(c.played).toBe(1);
+    const d = rows.find((r) => r.entrantId === "d")!;
+    expect(d.played).toBe(1);
+  });
+
+  it("manual gala with only 2 defined pairings — only those 2 contribute", () => {
+    const rows = computeStandings({
+      config: cfg(),
+      entrants: [E("a"), E("b"), E("c"), E("d")],
+      fixtures: [
+        {
+          id: "gala-manual",
+          homeEntrantId: null,
+          awayEntrantId: null,
+          status: "completed",
+          subMatches: [],
+          pairings: [
+            pairing("a", "b", ["a"]),
+            pairing("c", "d", ["c"]),
+          ],
+        },
+      ],
+    });
+    const a = rows.find((r) => r.entrantId === "a")!;
+    expect(a.played).toBe(1);
+    const b = rows.find((r) => r.entrantId === "b")!;
+    expect(b.played).toBe(1);
+    const c = rows.find((r) => r.entrantId === "c")!;
+    expect(c.played).toBe(1);
+    const d = rows.find((r) => r.entrantId === "d")!;
+    expect(d.played).toBe(1);
+    // Total games across all entrants = 2 fixtures × 2 sides = 4
+    const totalPlayed = rows.reduce((sum, r) => sum + r.played, 0);
+    expect(totalPlayed).toBe(4);
+  });
+
+  it("shuffled fixture order produces identical standings (determinism)", () => {
+    const fixtures = [
+      makeFixture("fx-1", "a", "b", [{ winner: "a" }]),
+      makeFixture("fx-2", "b", "c", [{ winner: "b" }]),
+      {
+        id: "gala-1",
+        homeEntrantId: null,
+        awayEntrantId: null,
+        status: "completed" as const,
+        subMatches: [],
+        pairings: [
+          pairing("a", "c", ["a"]),
+          pairing("b", "a", ["b"]),
+        ],
+      },
+    ];
+    const a = computeStandings({
+      config: cfg(),
+      entrants: [E("a"), E("b"), E("c")],
+      fixtures,
+    });
+    const b = computeStandings({
+      config: cfg(),
+      entrants: [E("a"), E("b"), E("c")],
+      fixtures: [fixtures[2]!, fixtures[0]!, fixtures[1]!],
+    });
+    expect(JSON.stringify(a)).toEqual(JSON.stringify(b));
+  });
+});
+
 describe("LeagueConfigNotImplementedError", () => {
   it("throws on round_robin_single fixture_format", () => {
     expect(() =>

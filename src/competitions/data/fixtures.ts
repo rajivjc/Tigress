@@ -11,11 +11,13 @@ import { isSupabaseConfigured } from "@/lib/supabase/env";
 import {
   MOCK_COMP_COMPETITIONS,
   MOCK_COMP_ENTRANTS,
+  MOCK_COMP_FIXTURE_PAIRINGS,
   MOCK_COMP_FIXTURES,
   MOCK_COMP_MATCHES,
   MOCK_COMP_MATCH_LINEUPS,
   MOCK_COMP_MATCH_RESULTS,
 } from "./mock-data";
+import type { GeneratedFixture } from "../lib/schedule";
 import type {
   Fixture,
   FixtureStatus,
@@ -119,6 +121,9 @@ export async function createFixture(
       away_entrant_id: input.away_entrant_id,
       status: "scheduled",
       notes: input.notes ?? null,
+      round_number: null,
+      is_bye: false,
+      pairing_mode: "two_team",
       created_at: nowIso,
       updated_at: nowIso,
     });
@@ -285,4 +290,228 @@ export async function getFixturesEnriched(
     );
     return { fixture, subMatches: sm, results, lineups };
   });
+}
+
+// =============================================================================
+// S24a: bulk operations for the schedule generator
+// =============================================================================
+
+/**
+ * Bulk-insert generated fixtures for a league competition. The generator
+ * resolves team ids to entrant ids via the caller (who knows the season +
+ * division → competition mapping); the data layer just persists rows.
+ *
+ * For 2-team rounds, `homeTeamId` / `awayTeamId` in the generator output map
+ * to entrant ids (the caller has already swapped). Bye rows have no entrants.
+ */
+export interface BulkCreateFixtureInput {
+  generated: GeneratedFixture;
+  /** Pre-resolved entrant ids — the action passes the team→entrant mapping. */
+  homeEntrantId: string | null;
+  awayEntrantId: string | null;
+}
+
+export async function bulkCreateFixtures(
+  competitionId: string,
+  rows: BulkCreateFixtureInput[]
+): Promise<{ success: boolean; rows?: Fixture[]; error?: string }> {
+  if (rows.length === 0) return { success: true, rows: [] };
+
+  if (!isSupabaseConfigured()) {
+    const nowIso = new Date().toISOString();
+    const inserted: Fixture[] = rows.map((r) => ({
+      id: randomId("comp-fixture"),
+      competition_id: competitionId,
+      fixture_date: r.generated.scheduledAt ?? nowIso,
+      home_entrant_id: r.homeEntrantId,
+      away_entrant_id: r.awayEntrantId,
+      status: "scheduled",
+      notes: null,
+      round_number: r.generated.roundNumber,
+      is_bye: r.generated.isBye,
+      pairing_mode: "two_team",
+      created_at: nowIso,
+      updated_at: nowIso,
+    }));
+    MOCK_COMP_FIXTURES.push(...inserted);
+    return { success: true, rows: inserted };
+  }
+
+  const supabase = createClient();
+  const nowIso = new Date().toISOString();
+  const payload = rows.map((r) => ({
+    competition_id: competitionId,
+    fixture_date: r.generated.scheduledAt ?? nowIso,
+    home_entrant_id: r.homeEntrantId,
+    away_entrant_id: r.awayEntrantId,
+    round_number: r.generated.roundNumber,
+    is_bye: r.generated.isBye,
+    pairing_mode: "two_team",
+  }));
+  const { data, error } = await supabase
+    .from("comp_fixtures")
+    .insert(payload)
+    .select("*");
+  if (error) return { success: false, error: error.message };
+  return { success: true, rows: (data as Fixture[] | null) ?? [] };
+}
+
+/**
+ * Delete every fixture for a competition. When `onlyIfNoResults` is true the
+ * call refuses if any sub-match has a recorded result and returns
+ * `{ success: false, error: 'RESULTS_EXIST' }`. Cascades drop sub-matches,
+ * lineups, results, and gala pairings via FK ON DELETE CASCADE.
+ */
+export async function deleteFixturesByCompetition(
+  competitionId: string,
+  options: { onlyIfNoResults: boolean } = { onlyIfNoResults: false }
+): Promise<{ success: boolean; deleted?: number; error?: string }> {
+  if (!isSupabaseConfigured()) {
+    const fixtureIds = MOCK_COMP_FIXTURES.filter(
+      (f) => f.competition_id === competitionId
+    ).map((f) => f.id);
+    if (fixtureIds.length === 0) return { success: true, deleted: 0 };
+
+    if (options.onlyIfNoResults) {
+      const matchIds = MOCK_COMP_MATCHES.filter(
+        (m) => m.fixture_id !== null && fixtureIds.includes(m.fixture_id)
+      ).map((m) => m.id);
+      const hasResults = MOCK_COMP_MATCH_RESULTS.some((r) =>
+        matchIds.includes(r.match_id)
+      );
+      if (hasResults) return { success: false, error: "RESULTS_EXIST" };
+    }
+
+    // Cascade in mock: pairings → matches → lineups → results → fixtures.
+    for (let i = MOCK_COMP_FIXTURE_PAIRINGS.length - 1; i >= 0; i--) {
+      if (fixtureIds.includes(MOCK_COMP_FIXTURE_PAIRINGS[i]!.fixture_id)) {
+        MOCK_COMP_FIXTURE_PAIRINGS.splice(i, 1);
+      }
+    }
+    const matchIds: string[] = [];
+    for (let i = MOCK_COMP_MATCHES.length - 1; i >= 0; i--) {
+      const fid = MOCK_COMP_MATCHES[i]!.fixture_id;
+      if (fid !== null && fixtureIds.includes(fid)) {
+        matchIds.push(MOCK_COMP_MATCHES[i]!.id);
+        MOCK_COMP_MATCHES.splice(i, 1);
+      }
+    }
+    for (let i = MOCK_COMP_MATCH_LINEUPS.length - 1; i >= 0; i--) {
+      if (matchIds.includes(MOCK_COMP_MATCH_LINEUPS[i]!.match_id)) {
+        MOCK_COMP_MATCH_LINEUPS.splice(i, 1);
+      }
+    }
+    for (let i = MOCK_COMP_MATCH_RESULTS.length - 1; i >= 0; i--) {
+      if (matchIds.includes(MOCK_COMP_MATCH_RESULTS[i]!.match_id)) {
+        MOCK_COMP_MATCH_RESULTS.splice(i, 1);
+      }
+    }
+    let deleted = 0;
+    for (let i = MOCK_COMP_FIXTURES.length - 1; i >= 0; i--) {
+      if (MOCK_COMP_FIXTURES[i]!.competition_id === competitionId) {
+        MOCK_COMP_FIXTURES.splice(i, 1);
+        deleted++;
+      }
+    }
+    return { success: true, deleted };
+  }
+
+  const supabase = createClient();
+  if (options.onlyIfNoResults) {
+    const { data: matchRows } = await supabase
+      .from("comp_matches")
+      .select("id")
+      .not("fixture_id", "is", null)
+      .eq("competition_id", competitionId);
+    const matchIds = ((matchRows as { id: string }[] | null) ?? []).map(
+      (m) => m.id
+    );
+    if (matchIds.length > 0) {
+      const { count } = await supabase
+        .from("comp_match_results")
+        .select("match_id", { count: "exact", head: true })
+        .in("match_id", matchIds);
+      if ((count ?? 0) > 0) {
+        return { success: false, error: "RESULTS_EXIST" };
+      }
+    }
+  }
+  const { data, error } = await supabase
+    .from("comp_fixtures")
+    .delete()
+    .eq("competition_id", competitionId)
+    .select("id");
+  if (error) return { success: false, error: error.message };
+  return {
+    success: true,
+    deleted: ((data as { id: string }[] | null) ?? []).length,
+  };
+}
+
+/**
+ * Create a gala fixture row (no home/away entrants — they live in
+ * comp_fixture_participants and pairwise matchups in comp_fixture_pairings).
+ */
+export interface CreateGalaFixtureInput {
+  competition_id: string;
+  fixture_date: string;
+  pairing_mode: "gala_round_robin" | "gala_manual";
+  notes?: string | null;
+}
+
+export async function createGalaFixture(
+  input: CreateGalaFixtureInput
+): Promise<{ success: boolean; id?: string; error?: string }> {
+  if (!isSupabaseConfigured()) {
+    const id = randomId("comp-fixture");
+    const nowIso = new Date().toISOString();
+    MOCK_COMP_FIXTURES.push({
+      id,
+      competition_id: input.competition_id,
+      fixture_date: input.fixture_date,
+      home_entrant_id: null,
+      away_entrant_id: null,
+      status: "scheduled",
+      notes: input.notes ?? null,
+      round_number: null,
+      is_bye: false,
+      pairing_mode: input.pairing_mode,
+      created_at: nowIso,
+      updated_at: nowIso,
+    });
+    return { success: true, id };
+  }
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("comp_fixtures")
+    .insert({
+      competition_id: input.competition_id,
+      fixture_date: input.fixture_date,
+      home_entrant_id: null,
+      away_entrant_id: null,
+      pairing_mode: input.pairing_mode,
+      notes: input.notes ?? null,
+    })
+    .select("id")
+    .maybeSingle();
+  if (error || !data) {
+    return { success: false, error: error?.message ?? "Insert failed" };
+  }
+  return { success: true, id: (data as { id: string }).id };
+}
+
+/** Used by the action layer to detect whether to allow `mode = 'empty'`. */
+export async function countFixturesByCompetition(
+  competitionId: string
+): Promise<number> {
+  if (!isSupabaseConfigured()) {
+    return MOCK_COMP_FIXTURES.filter((f) => f.competition_id === competitionId)
+      .length;
+  }
+  const supabase = createClient();
+  const { count } = await supabase
+    .from("comp_fixtures")
+    .select("id", { count: "exact", head: true })
+    .eq("competition_id", competitionId);
+  return count ?? 0;
 }
