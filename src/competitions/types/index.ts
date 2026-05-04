@@ -300,12 +300,27 @@ export interface FixturePairing {
   created_at: string;
 }
 
+export type LineupApprovalStatus =
+  | "not_required"
+  | "pending"
+  | "approved"
+  | "rejected";
+
 export interface MatchLineup {
   match_id: string;
   entrant_id: string;
   member_id: string;
   side: LineupSide;
   recorded_at: string;
+  /** S24b1: substitution-approval workflow. `not_required` for roster
+   *  members under any rule and for any member under `loose`. `pending`
+   *  when a non-roster substitute lands under `sub_with_approval` — the
+   *  opposing captain (or a manager override) must approve before
+   *  reportSubMatch will accept a result. */
+  approval_status: LineupApprovalStatus;
+  approved_by_member_id: string | null;
+  approved_at: string | null;
+  approval_note: string | null;
 }
 
 /**
@@ -315,22 +330,63 @@ export interface MatchLineup {
  * `computeStandings` throws `LeagueConfigNotImplementedError(feature)` when
  * asked to compute with them.
  */
+export type LeaguePointsRule =
+  | "win_draw_loss"
+  | "win_loss"
+  | "per_sub_match";
+
+export type LeagueTiedSubMatchesRule =
+  | "home_wins"
+  | "away_wins"
+  | "replay_required";
+
+export interface LeagueConfigPoints {
+  rule: LeaguePointsRule;
+  win_points: number;
+  /** Ignored for `win_loss` and `per_sub_match`. */
+  draw_points: number;
+  loss_points: number;
+  /** Required when `rule === 'win_loss'`. How a tied sub-match count
+   *  resolves into a fixture-level outcome. */
+  tied_sub_matches?: LeagueTiedSubMatchesRule;
+  /** Required when `rule === 'per_sub_match'`. Points awarded per sub-match
+   *  win (>= 0). */
+  sub_match_win_points?: number;
+}
+
+export type LeagueLineupRule = "strict" | "loose" | "sub_with_approval";
+
+export interface LeagueConfigLineup {
+  rule: LeagueLineupRule;
+  allow_player_in_multiple_slots: boolean;
+}
+
+/**
+ * Tiebreakers ranked higher in the configured order win first. For all
+ * options EXCEPT `*_lost`, more is better. For `sub_matches_lost` and
+ * `frames_lost`, fewer is better — the standings sort inverts those values
+ * before comparing.
+ */
+export type LeagueTiebreaker =
+  | "head_to_head"
+  | "sub_match_diff"
+  | "sub_matches_won"
+  | "sub_matches_lost"
+  | "frame_diff"
+  | "frames_won"
+  | "frames_lost"
+  | "away_wins"
+  | "wins"
+  | "draws";
+
 export interface LeagueConfig {
   version: 1;
   fixture_format: "round_robin_single" | "round_robin_double" | "flexible";
   home_away: "tracked" | "label_only" | "none";
-  points: {
-    rule: "win_draw_loss" | "win_loss" | "per_sub_match";
-    win_points: number;
-    draw_points: number;
-    loss_points: number;
-  };
-  lineup: {
-    rule: "strict" | "loose" | "sub_with_approval";
-    allow_player_in_multiple_slots: boolean;
-  };
+  points: LeagueConfigPoints;
+  lineup: LeagueConfigLineup;
   sub_match_slots: TeamMatchSlot[];
-  tiebreakers: ("head_to_head" | "sub_match_diff" | "sub_matches_won")[];
+  tiebreakers: LeagueTiebreaker[];
 }
 
 // ---------- Audit events ----------
@@ -376,4 +432,10 @@ export type CompAuditEventType =
   | "comp.season.fixtures_generated"
   | "comp.season.fixtures_regenerated"
   | "comp.fixture.gala_created"
-  | "comp.fixture.gala_pairings_set";
+  | "comp.fixture.gala_pairings_set"
+  // Session 24b1 — substitution approvals + replay-required tracking
+  | "comp.lineup.sub_approval_requested"
+  | "comp.lineup.sub_approved"
+  | "comp.lineup.sub_rejected"
+  | "comp.lineup.sub_override_approved"
+  | "comp.fixture.replay_required";

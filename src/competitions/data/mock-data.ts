@@ -1325,6 +1325,9 @@ if (s3ResultIdx >= 0) leagueSubMatchResults.splice(s3ResultIdx, 1);
 MOCK_COMP_MATCH_RESULTS.push(...leagueSubMatchResults);
 
 // Lineups — set for fixtures 1, 2, 3 (singles slots, 1 member per side).
+// All seeded rows are roster members under strict mode → approval_status is
+// always 'not_required' here. The S24b1 sub_with_approval flow only stages
+// pending rows when an explicitly non-roster member is fielded.
 export const MOCK_COMP_MATCH_LINEUPS: MatchLineup[] = [
   // Fixture 1 (Felt Tips vs Chalk Dust)
   {
@@ -1333,6 +1336,10 @@ export const MOCK_COMP_MATCH_LINEUPS: MatchLineup[] = [
     member_id: "mock-member-row-1",
     side: "a",
     recorded_at: "2026-03-04T18:45:00.000Z",
+    approval_status: "not_required",
+    approved_by_member_id: null,
+    approved_at: null,
+    approval_note: null,
   },
   {
     match_id: "comp-match-lg-1-s1",
@@ -1340,6 +1347,10 @@ export const MOCK_COMP_MATCH_LINEUPS: MatchLineup[] = [
     member_id: "mock-member-row-2",
     side: "b",
     recorded_at: "2026-03-04T18:45:00.000Z",
+    approval_status: "not_required",
+    approved_by_member_id: null,
+    approved_at: null,
+    approval_note: null,
   },
   {
     match_id: "comp-match-lg-1-s2",
@@ -1347,6 +1358,10 @@ export const MOCK_COMP_MATCH_LINEUPS: MatchLineup[] = [
     member_id: "mock-member-row-3",
     side: "a",
     recorded_at: "2026-03-04T18:45:00.000Z",
+    approval_status: "not_required",
+    approved_by_member_id: null,
+    approved_at: null,
+    approval_note: null,
   },
   {
     match_id: "comp-match-lg-1-s2",
@@ -1354,6 +1369,10 @@ export const MOCK_COMP_MATCH_LINEUPS: MatchLineup[] = [
     member_id: "mock-member-row-4",
     side: "b",
     recorded_at: "2026-03-04T18:45:00.000Z",
+    approval_status: "not_required",
+    approved_by_member_id: null,
+    approved_at: null,
+    approval_note: null,
   },
   {
     match_id: "comp-match-lg-1-s3",
@@ -1361,6 +1380,10 @@ export const MOCK_COMP_MATCH_LINEUPS: MatchLineup[] = [
     member_id: "mock-member-row-1",
     side: "a",
     recorded_at: "2026-03-04T18:45:00.000Z",
+    approval_status: "not_required",
+    approved_by_member_id: null,
+    approved_at: null,
+    approval_note: null,
   },
   {
     match_id: "comp-match-lg-1-s3",
@@ -1368,6 +1391,10 @@ export const MOCK_COMP_MATCH_LINEUPS: MatchLineup[] = [
     member_id: "mock-member-row-4",
     side: "b",
     recorded_at: "2026-03-04T18:45:00.000Z",
+    approval_status: "not_required",
+    approved_by_member_id: null,
+    approved_at: null,
+    approval_note: null,
   },
   // Fixture 3 — lineups set but play incomplete
   {
@@ -1376,6 +1403,10 @@ export const MOCK_COMP_MATCH_LINEUPS: MatchLineup[] = [
     member_id: "mock-member-row-1",
     side: "a",
     recorded_at: "2026-03-18T18:45:00.000Z",
+    approval_status: "not_required",
+    approved_by_member_id: null,
+    approved_at: null,
+    approval_note: null,
   },
   {
     match_id: "comp-match-lg-3-s1",
@@ -1383,6 +1414,10 @@ export const MOCK_COMP_MATCH_LINEUPS: MatchLineup[] = [
     member_id: "mock-member-row-3",
     side: "b",
     recorded_at: "2026-03-18T18:45:00.000Z",
+    approval_status: "not_required",
+    approved_by_member_id: null,
+    approved_at: null,
+    approval_note: null,
   },
 ];
 

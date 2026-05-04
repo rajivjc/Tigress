@@ -428,6 +428,39 @@ export function playerRefToEntrantColumns(ref: EntrantRef): {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Active-member filter (S24b1)
+// ---------------------------------------------------------------------------
+
+/**
+ * Return the subset of `memberIds` that resolve to currently-active members.
+ * Used by the lineup data layer to validate non-roster substitutes under
+ * `loose` and `sub_with_approval` lineup rules. Living in the Player adapter
+ * keeps the rest of the module free of host-app `members` table references.
+ */
+export async function listActiveMemberIds(
+  memberIds: string[]
+): Promise<Set<string>> {
+  if (memberIds.length === 0) return new Set();
+  if (!isSupabaseConfigured()) {
+    const ids = new Set(memberIds);
+    const out = new Set<string>();
+    for (const m of MOCK_MEMBERS) {
+      if (m.status === "active" && ids.has(m.id)) out.add(m.id);
+    }
+    return out;
+  }
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("members")
+    .select("id")
+    .eq("status", "active")
+    .in("id", memberIds);
+  return new Set(
+    ((data as { id: string }[] | null) ?? []).map((r) => r.id)
+  );
+}
+
 // =============================================================================
 // Internal helpers
 // =============================================================================

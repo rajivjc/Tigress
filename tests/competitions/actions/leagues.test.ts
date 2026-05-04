@@ -123,10 +123,10 @@ describe("createLeagueCompetitionAction", () => {
     expect(res.error).toMatch(/archiv/i);
   });
 
-  it("rejects lineup.rule = 'loose'", async () => {
+  it("accepts lineup.rule = 'loose' (S24b1)", async () => {
     signInAs("mock-manager-1");
     const res = await createLeagueCompetitionAction({
-      name: "Test League",
+      name: "Loose League",
       description: null,
       divisionId: DIVISION,
       gameTypeId: GAME_TYPE,
@@ -137,11 +137,10 @@ describe("createLeagueCompetitionAction", () => {
         lineup: { rule: "loose", allow_player_in_multiple_slots: false },
       },
     });
-    expect(res.success).toBe(false);
-    expect(res.error).toMatch(/lineup/);
+    expect(res.success).toBe(true);
   });
 
-  it("rejects per_sub_match points rule", async () => {
+  it("rejects per_sub_match points rule when sub_match_win_points is missing", async () => {
     signInAs("mock-manager-1");
     const res = await createLeagueCompetitionAction({
       name: "Test League",
@@ -161,6 +160,29 @@ describe("createLeagueCompetitionAction", () => {
       },
     });
     expect(res.success).toBe(false);
-    expect(res.error).toMatch(/per_sub_match/);
+    expect(res.error).toMatch(/sub_match_win_points/);
+  });
+
+  it("accepts per_sub_match points rule when sub_match_win_points is set (S24b1)", async () => {
+    signInAs("mock-manager-1");
+    const res = await createLeagueCompetitionAction({
+      name: "Per-Frame League",
+      description: null,
+      divisionId: DIVISION,
+      gameTypeId: GAME_TYPE,
+      guestPolicy: "members_only",
+      teamMatchConfig,
+      leagueConfig: {
+        ...supportedConfig,
+        points: {
+          rule: "per_sub_match",
+          win_points: 0,
+          draw_points: 0,
+          loss_points: 0,
+          sub_match_win_points: 1,
+        },
+      },
+    });
+    expect(res.success).toBe(true);
   });
 });
