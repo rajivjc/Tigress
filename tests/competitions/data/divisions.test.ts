@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import {
   createDivision,
   deleteDivision,
+  findDivisionsByTiers,
   getDivision,
   listDivisions,
 } from "@/competitions/data/divisions";
@@ -86,5 +87,29 @@ describe("divisions data layer (mock mode)", () => {
     expect(res.success).toBe(true);
     const still = await getDivision(created.id!);
     expect(still).toBeNull();
+  });
+
+  it("findDivisionsByTiers returns matching divisions keyed by tier", async () => {
+    const map = await findDivisionsByTiers({
+      season_id: SPRING,
+      league_name: "Wednesday Night",
+      tiers: [1, 2],
+    });
+    expect(map.size).toBe(2);
+    expect(map.get(1)?.tier).toBe(1);
+    expect(map.get(1)?.id).toBe("comp-division-spring-premier");
+    expect(map.get(2)?.tier).toBe(2);
+    expect(map.get(2)?.id).toBe("comp-division-spring-div1");
+  });
+
+  it("findDivisionsByTiers omits tiers that don't exist", async () => {
+    const map = await findDivisionsByTiers({
+      season_id: SPRING,
+      league_name: "Wednesday Night",
+      tiers: [1, 99],
+    });
+    expect(map.size).toBe(1);
+    expect(map.get(1)?.tier).toBe(1);
+    expect(map.has(99)).toBe(false);
   });
 });

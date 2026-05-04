@@ -177,9 +177,8 @@ describe("reportSubMatchResultAction", () => {
     auditSpy.mockRestore();
   });
 
-  it("S24b2: does not emit replay_required when tied_sub_matches is home_wins (resolved by config)", async () => {
+  it("S24b2: does not emit replay_required when tied_sub_matches is home_wins (config resolves the tie)", async () => {
     const auditSpy = vi.spyOn(audit, "writeCompAuditLog");
-    // Mutate the league config to win_loss + home_wins.
     const comp = MOCK_COMP_COMPETITIONS.find(
       (c) => c.id === "comp-league-spring-premier"
     )!;
@@ -194,35 +193,23 @@ describe("reportSubMatchResultAction", () => {
       },
     };
 
+    // Reduce fixture 3 to 2 sub-matches so a 1-1 tie is achievable. s1 is
+    // seeded with felt as winner; reporting s2 as a cue win produces the tie.
+    const { MOCK_COMP_MATCHES } = await import("@/competitions/data/mock-data");
+    const s3idx = MOCK_COMP_MATCHES.findIndex((m) => m.id === FIXTURE_3_S3);
+    if (s3idx >= 0) MOCK_COMP_MATCHES.splice(s3idx, 1);
+
     signInAs("mock-manager-1");
-    // Tie 1-1 across the 3 sub-matches — felt won s1 (seed); cue wins s2,
-    // both tie s3 by setting felt as winner of s3. Actually let's force a
-    // 1-1 then a third draw via felt winning s3:
-    //   s1 (already done): felt wins
-    //   s2: cue wins
-    //   s3: felt wins → 2-1 felt → not tied. Pick:
-    //   s2: cue wins
-    //   s3: cue wins → 1-2 cue → not tied.
-    // For genuine tie we need exactly equal sub-match counts. With 3 slots
-    // that's impossible if both s2/s3 are reported. Drop s3 entirely.
-    // Easiest: report s2 cue, leave s3 unreported. But then fixture won't
-    // auto-complete. Instead clear the seeded s1 result so 0-0-0 with only
-    // s2+s3 reported as 1-1 and s3 can stay unreported... actually s3
-    // being unreported is the problem. Just keep this test skipped via an
-    // "I" check rather than chase this — assert the no-op path with a
-    // simpler 1-pair scenario by reporting a non-tied result.
-    await reportSubMatchResultAction({
+    const r = await reportSubMatchResultAction({
       matchId: FIXTURE_3_S2,
       winnerEntrantId: "comp-entrant-sp-cue",
       scoreA: 2,
       scoreB: 5,
     });
-    await reportSubMatchResultAction({
-      matchId: FIXTURE_3_S3,
-      winnerEntrantId: "comp-entrant-sp-felt",
-      scoreA: 5,
-      scoreB: 3,
-    });
+    expect(r.success).toBe(true);
+    expect(r.fixtureCompleted).toBe(true);
+
+    // Tied 1-1 but the config says home wins — no replay emitted.
     const replayCalls = auditSpy.mock.calls.filter(
       (c) => c[0] === "comp.fixture.replay_required"
     );

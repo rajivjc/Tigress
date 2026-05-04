@@ -221,6 +221,41 @@ export async function findDivisionByTier(args: {
 }
 
 /**
+ * Batch sibling to `findDivisionByTier`. Resolves a fixed set of tiers in one
+ * round trip and returns a map keyed by `tier`. Used by the promotion
+ * finalize action which needs at most 3 tiers (current ± 1).
+ */
+export async function findDivisionsByTiers(args: {
+  season_id: string;
+  league_name: string;
+  tiers: number[];
+}): Promise<Map<number, Division>> {
+  const out = new Map<number, Division>();
+  if (args.tiers.length === 0) return out;
+  const unique = Array.from(new Set(args.tiers));
+
+  if (!isSupabaseConfigured()) {
+    for (const d of MOCK_COMP_DIVISIONS) {
+      if (d.season_id !== args.season_id) continue;
+      if (d.league_name !== args.league_name) continue;
+      if (unique.includes(d.tier)) out.set(d.tier, d);
+    }
+    return out;
+  }
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("comp_divisions")
+    .select("*")
+    .eq("season_id", args.season_id)
+    .eq("league_name", args.league_name)
+    .in("tier", unique);
+  for (const row of (data as Division[] | null) ?? []) {
+    out.set(row.tier, row);
+  }
+  return out;
+}
+
+/**
  * Only deletable if no competition references it. Real mode relies on the FK
  * `ON DELETE RESTRICT` to enforce this; mock mode mirrors the check.
  */

@@ -359,6 +359,27 @@ describe("finalizeDivisionPromotionsAction", () => {
     }
   });
 
+  it("rejects overrides with empty notes via OVERRIDE_NOTE_REQUIRED code", async () => {
+    signInAs("mock-manager-1");
+    setupForFinalize();
+    const res = await finalizeDivisionPromotionsAction({
+      divisionId: PREMIER,
+      confirm: true,
+      overrides: [
+        {
+          entrantId: "comp-entrant-sp-felt",
+          decision: "promote",
+          note: "   ",
+        },
+      ],
+    });
+    expect(res.success).toBe(false);
+    if (!res.success) {
+      expect(res.error).toBe("OVERRIDE_NOTE_REQUIRED");
+      expect(res.overrideNoteMissingFor).toBe("comp-entrant-sp-felt");
+    }
+  });
+
   it("tied at relegation boundary with valid override → finalizes and override flag is set", async () => {
     signInAs("mock-manager-1");
     setupForFinalize();

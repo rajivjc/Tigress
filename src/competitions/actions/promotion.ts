@@ -13,7 +13,7 @@
 import "server-only";
 import { revalidatePath } from "next/cache";
 import { getCurrentActor } from "../data/players";
-import { getDivision, findDivisionByTier } from "../data/divisions";
+import { getDivision, findDivisionsByTiers } from "../data/divisions";
 import { getSeason, setNextSeasonId } from "../data/seasons";
 import { listCompetitions } from "../data/competitions";
 import { listFixtures } from "../data/fixtures";
@@ -74,6 +74,9 @@ export type FinalizePromotionsResult =
       missingTargets?: { tier: number; leagueName: string }[];
       incompleteFixtureIds?: string[];
       replayRequired?: ReplayRequiredItem[];
+      /** Set when error === "OVERRIDE_NOTE_REQUIRED": the entrantId whose
+       *  override is missing a note. */
+      overrideNoteMissingFor?: string;
     };
 
 const ERR_NOT_SIGNED_IN = "NOT_SIGNED_IN";
@@ -87,6 +90,7 @@ const ERR_FIXTURES_INCOMPLETE = "FIXTURES_INCOMPLETE";
 const ERR_REPLAY_REQUIRED_PENDING = "REPLAY_REQUIRED_PENDING";
 const ERR_NEXT_SEASON_NOT_SET_UP = "NEXT_SEASON_NOT_SET_UP";
 const ERR_TARGET_DIVISIONS_MISSING = "TARGET_DIVISIONS_MISSING";
+const ERR_OVERRIDE_NOTE_REQUIRED = "OVERRIDE_NOTE_REQUIRED";
 
 /**
  * Two consecutive standings rows are "tied for real" when their points and
@@ -136,9 +140,10 @@ export async function finalizeDivisionPromotionsAction(
   // Find the competition for this division. A division has at most one
   // competition (S23 invariant); if there are several we pick the first
   // — the action is idempotent enough that picking any non-completed one
-  // is fine, but the v1 spec only contemplates one.
-  const allComps = await listCompetitions({ kind: "league" });
-  const competition = allComps.find(
+  // is fine, but the v1 spec only contemplates one. Cache the full list
+  // so the per-decision target-competition lookup below reuses it.
+  const allLeagueComps = await listCompetitions({ kind: "league" });
+  const competition = allLeagueComps.find(
     (c: Competition) => c.division_id === division.id
   );
   if (!competition) {
@@ -211,7 +216,8 @@ export async function finalizeDivisionPromotionsAction(
     if (!o.note || o.note.trim().length === 0) {
       return {
         success: false,
-        error: `Override for entrant ${o.entrantId} requires a note`,
+        error: ERR_OVERRIDE_NOTE_REQUIRED,
+        overrideNoteMissingFor: o.entrantId,
       };
     }
     overrideMap.set(o.entrantId, {
@@ -249,8 +255,25 @@ export async function finalizeDivisionPromotionsAction(
     return { success: false, error: (err as Error).message };
   }
 
-  // Resolve target divisions in the next season.
-  const targetCompCache = new Map<string, Competition | null>();
+  // Resolve target divisions in the next season. Batch the lookup so all
+  // tiers needed by this finalize are fetched in one round trip — the
+  // decision loop then does in-memory lookups.
+  const tiersNeeded = new Set<number>();
+  for (const d of decisions) {
+    const targetTier =
+      d.decision === "promote"
+        ? division.tier - 1
+        : d.decision === "relegate"
+          ? division.tier + 1
+          : division.tier;
+    tiersNeeded.add(targetTier);
+  }
+  const targetDivisionMap = await findDivisionsByTiers({
+    season_id: season.next_season_id,
+    league_name: division.league_name,
+    tiers: Array.from(tiersNeeded),
+  });
+
   const missingTargets: { tier: number; leagueName: string }[] = [];
   const inserts: PromotionDecisionInsert[] = [];
   for (const d of decisions) {
@@ -260,11 +283,7 @@ export async function finalizeDivisionPromotionsAction(
         : d.decision === "relegate"
           ? division.tier + 1
           : division.tier;
-    const targetDivision = await findDivisionByTier({
-      season_id: season.next_season_id,
-      league_name: division.league_name,
-      tier: targetTier,
-    });
+    const targetDivision = targetDivisionMap.get(targetTier) ?? null;
     if (!targetDivision) {
       missingTargets.push({
         tier: targetTier,
@@ -272,13 +291,8 @@ export async function finalizeDivisionPromotionsAction(
       });
       continue;
     }
-    let targetComp = targetCompCache.get(targetDivision.id);
-    if (targetComp === undefined) {
-      const candidates = await listCompetitions({ kind: "league" });
-      targetComp =
-        candidates.find((c) => c.division_id === targetDivision.id) ?? null;
-      targetCompCache.set(targetDivision.id, targetComp);
-    }
+    const targetComp =
+      allLeagueComps.find((c) => c.division_id === targetDivision.id) ?? null;
     if (!targetComp) {
       missingTargets.push({
         tier: targetTier,

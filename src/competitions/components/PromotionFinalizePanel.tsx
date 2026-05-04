@@ -154,9 +154,21 @@ export function PromotionFinalizePanel({
         </div>
       )}
 
+      {result && !result.success && result.error === "OVERRIDE_NOTE_REQUIRED" && (
+        <div className="mb-3 rounded-lg border border-rose-400/40 bg-rose-500/10 p-3 text-xs text-rose-100">
+          <p>
+            A note is required for the override on entrant{" "}
+            {divisionEntrantNames[result.overrideNoteMissingFor ?? ""] ??
+              result.overrideNoteMissingFor}
+            .
+          </p>
+        </div>
+      )}
+
       {result && !result.success && !result.ties && !result.replayRequired
         && !result.missingTargets && !result.incompleteFixtureIds
-        && result.error !== "NEXT_SEASON_NOT_SET_UP" && (
+        && result.error !== "NEXT_SEASON_NOT_SET_UP"
+        && result.error !== "OVERRIDE_NOTE_REQUIRED" && (
           <div className="mb-3 rounded-lg border border-rose-400/40 bg-rose-500/10 p-3 text-xs text-rose-100">
             {result.error}
           </div>
