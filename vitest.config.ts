@@ -5,11 +5,14 @@ export default defineConfig({
   test: {
     environment: "node",
     globals: false,
-    include: ["tests/**/*.test.ts"],
+    include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"],
     setupFiles: ["./tests/setup.ts"],
     // Each test file runs in isolation so mutable MOCK_* arrays don't bleed
     // across files. Within a file we reset manually in `beforeEach`.
     isolate: true,
+  },
+  esbuild: {
+    jsx: "automatic",
   },
   resolve: {
     alias: {
