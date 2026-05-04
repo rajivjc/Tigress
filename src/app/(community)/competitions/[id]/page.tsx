@@ -19,6 +19,7 @@ import { FixtureList } from "@/competitions/components/FixtureList";
 import { RegistrationButton } from "@/competitions/components/RegistrationButton";
 import { WithdrawButton } from "@/competitions/components/WithdrawButton";
 import { PublishBracketButton } from "@/competitions/components/PublishBracketButton";
+import { PendingApprovalsList } from "@/competitions/components/PendingApprovalsList";
 
 export const dynamic = "force-dynamic";
 
@@ -76,11 +77,21 @@ async function LeagueSections({
           Standings
         </h2>
         {standings.success ? (
-          <StandingsTable
-            rows={standings.data.rows}
-            entrantNames={entrantNameMap}
-            highlightEntrantId={viewerEntrantId}
-          />
+          <div className="space-y-3">
+            {standings.data.replayRequiredFixtureIds.length > 0 && (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                {standings.data.replayRequiredFixtureIds.length === 1
+                  ? "1 fixture needs replay before standings are final."
+                  : `${standings.data.replayRequiredFixtureIds.length} fixtures need replay before standings are final.`}
+              </div>
+            )}
+            <StandingsTable
+              rows={standings.data.rows}
+              entrantNames={entrantNameMap}
+              highlightEntrantId={viewerEntrantId}
+              config={standings.data.config}
+            />
+          </div>
         ) : (
           <div className="rounded-xl border border-dashed border-white/15 bg-surface-1/50 p-6 text-center text-xs text-white/50">
             {standings.error}
@@ -335,6 +346,12 @@ export default async function CompetitionDetailPage({
 
       {competition.kind === "league" && (
         <>
+          {member !== null && (
+            <PendingApprovalsList
+              competitionId={competition.id}
+              captainMemberId={member.id}
+            />
+          )}
           <LeagueSections
             competitionId={competition.id}
             entrants={entrants}

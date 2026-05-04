@@ -233,22 +233,18 @@ describe("generateSeasonFixtures action", () => {
     );
     expect(initialMaxRound).toBe(3);
 
-    // Add 5th team entrant.
+    // Add a 5th, distinct team entrant. The first four entrants reuse the
+    // teams from the premier division; the late-joiner needs its own row in
+    // MOCK_COMP_TEAMS so the entrant resolves to a brand-new team.
     const now = new Date().toISOString();
-    MOCK_COMP_ENTRANTS.push({
-      id: "comp-entrant-d1-5",
-      competition_id: DIV1_LEAGUE,
-      entrant_member_id: null,
-      entrant_guest_id: null,
-      entrant_team_id: "comp-team-felt-tips", // any active team — re-use to avoid seeding a new one; test below relies on count not identity
-      seed_number: null,
+    MOCK_COMP_TEAMS.push({
+      id: "comp-team-late-joiner",
+      name: "Late Joiner",
+      captain_member_id: "mock-member-row-1",
       status: "active",
-      registered_at: now,
+      created_at: now,
+      updated_at: now,
     });
-    // Replace the duplicated team with a fresh one so the late-joiner is
-    // genuinely new. comp-team-cue-crew/break-point/felt-tips/chalk-dust
-    // are already there; introduce a fifth, real, distinct team.
-    MOCK_COMP_ENTRANTS.pop();
     MOCK_COMP_ENTRANTS.push({
       id: "comp-entrant-d1-5",
       competition_id: DIV1_LEAGUE,
@@ -258,14 +254,6 @@ describe("generateSeasonFixtures action", () => {
       seed_number: null,
       status: "active",
       registered_at: now,
-    });
-    MOCK_COMP_TEAMS.push({
-      id: "comp-team-late-joiner",
-      name: "Late Joiner",
-      captain_member_id: "mock-member-row-1",
-      status: "active",
-      created_at: now,
-      updated_at: now,
     });
 
     const res = await generateSeasonFixtures({

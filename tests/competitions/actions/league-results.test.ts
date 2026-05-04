@@ -3,6 +3,7 @@ import { reportSubMatchResultAction } from "@/competitions/actions/league-result
 import { getFixture } from "@/competitions/data/fixtures";
 import { getResult } from "@/competitions/data/match-results";
 import { getMatch } from "@/competitions/data/matches";
+import { setLineup } from "@/competitions/data/lineups";
 import { MOCK_SESSION_COOKIE } from "@/lib/auth/mock-users";
 import { __setMockCookie } from "../../stubs/next-headers";
 import { resetMockData } from "../../helpers/reset-mock-data";
@@ -118,5 +119,58 @@ describe("reportSubMatchResultAction", () => {
     });
     expect(res.success).toBe(false);
     expect(res.error).toMatch(/race-to/i);
+  });
+
+  it("S24b1: blocks reporting while a pending substitution exists", async () => {
+    // Stage a pending sub on the Felt side via the data layer (forcing the
+    // sub_with_approval rule so it lands in pending state).
+    const stage = await setLineup({
+      matchId: FIXTURE_3_S2,
+      side: "a",
+      memberIds: ["mock-member-row-2"], // not on Felt Tips roster
+      slotKind: "singles",
+      lineupRule: "sub_with_approval",
+    });
+    expect(stage.success).toBe(true);
+    expect(stage.pendingMemberIds).toEqual(["mock-member-row-2"]);
+
+    signInAs("mock-manager-1");
+    const res = await reportSubMatchResultAction({
+      matchId: FIXTURE_3_S2,
+      winnerEntrantId: "comp-entrant-sp-felt",
+      scoreA: 5,
+      scoreB: 3,
+    });
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/LINEUP_PENDING_APPROVAL/);
+  });
+
+  it("S24b1: succeeds after the pending substitution is approved", async () => {
+    await setLineup({
+      matchId: FIXTURE_3_S2,
+      side: "a",
+      memberIds: ["mock-member-row-2"],
+      slotKind: "singles",
+      lineupRule: "sub_with_approval",
+    });
+    const { approveLineupSubstitutionAction } = await import(
+      "@/competitions/actions/lineup-approvals"
+    );
+    signInAs("mock-manager-1");
+    const approved = await approveLineupSubstitutionAction({
+      matchId: FIXTURE_3_S2,
+      entrantId: "comp-entrant-sp-felt",
+      side: "a",
+      decision: "approved",
+    });
+    expect(approved.success).toBe(true);
+
+    const res = await reportSubMatchResultAction({
+      matchId: FIXTURE_3_S2,
+      winnerEntrantId: "comp-entrant-sp-felt",
+      scoreA: 5,
+      scoreB: 3,
+    });
+    expect(res.success).toBe(true);
   });
 });

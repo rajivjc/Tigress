@@ -1,12 +1,15 @@
 "use server";
 
 // =============================================================================
-// Competitions — lineups server actions (Session 23)
+// Competitions — lineups server actions (S23, extended in S24b1)
 // =============================================================================
-// Captain of either side can set their own team's lineup; manager / owner
-// can override either side. Strict lineup rule (the only one supported in
-// S23): members must be on the team's roster, count must match the slot's
-// kind (1 for singles, 2 for doubles).
+// Captain of either side can set their own team's lineup; manager / owner can
+// override either side. The league's `lineup.rule` decides what's accepted:
+//   * strict             — roster-only.
+//   * loose              — any active member.
+//   * sub_with_approval  — non-roster active members go through as `pending`,
+//                          unblocked by the opposing captain via
+//                          `approveLineupSubstitutionAction`.
 // =============================================================================
 
 import "server-only";
@@ -32,7 +35,7 @@ export interface SetLineupActionInput {
 
 export async function setLineupAction(
   input: SetLineupActionInput
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; pendingMemberIds?: string[] }> {
   const actor = await getCurrentActor();
   if (!actor) return { success: false, error: "Not signed in" };
 
@@ -64,25 +67,23 @@ export async function setLineupAction(
     }
   }
 
-  // Infer slot kind from the competition's league_config if not given. For
-  // S23 the default is singles.
+  // Pull the competition once to derive both slot kind and lineup rule.
+  const comp = await getCompetition(match.competition_id);
   let slotKind: "singles" | "doubles" = input.slotKind ?? "singles";
-  if (!input.slotKind) {
-    const comp = await getCompetition(match.competition_id);
-    if (comp?.league_config) {
-      // First slot by sort order — pragmatic default for the 1-slot demo.
-      const slots = comp.league_config.sub_match_slots
-        .slice()
-        .sort((a, b) => a.sort_order - b.sort_order);
-      if (slots[0]) slotKind = slots[0].kind;
-    }
+  if (!input.slotKind && comp?.league_config) {
+    const slots = comp.league_config.sub_match_slots
+      .slice()
+      .sort((a, b) => a.sort_order - b.sort_order);
+    if (slots[0]) slotKind = slots[0].kind;
   }
+  const lineupRule = comp?.league_config?.lineup.rule ?? "strict";
 
   const res = await setLineup({
     matchId: input.matchId,
     side: input.side,
     memberIds: input.memberIds,
     slotKind,
+    lineupRule,
   });
   if (!res.success) return res;
 
@@ -90,10 +91,27 @@ export async function setLineupAction(
     matchId: input.matchId,
     side: input.side,
     memberIds: input.memberIds,
+    lineupRule,
   });
 
+  // Stage one approval-request audit per pending substitute. Real-mode
+  // captains pick this up via `listPendingApprovalsForCaptain`.
+  const pendingMemberIds = res.pendingMemberIds ?? [];
+  for (const memberId of pendingMemberIds) {
+    await writeCompAuditLog(
+      "comp.lineup.sub_approval_requested",
+      input.matchId,
+      actor.player.id,
+      {
+        matchId: input.matchId,
+        side: input.side,
+        substituteMemberId: memberId,
+      }
+    );
+  }
+
   revalidatePath(`/competitions/${match.competition_id}`);
-  return { success: true };
+  return { success: true, pendingMemberIds };
 }
 
 export async function clearLineupAction(
