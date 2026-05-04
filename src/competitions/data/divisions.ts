@@ -107,6 +107,10 @@ export async function createDivision(
       league_name: leagueName,
       tier: input.tier,
       tier_name: tierName,
+      promote_count: 0,
+      relegate_count: 0,
+      promotions_finalized_at: null,
+      promotions_finalized_by: null,
       created_at: new Date().toISOString(),
     });
     return { success: true, id };
@@ -127,6 +131,93 @@ export async function createDivision(
     return { success: false, error: error?.message ?? "Insert failed" };
   }
   return { success: true, id: (data as { id: string }).id };
+}
+
+/**
+ * S24b2: update the promote/relegate counts on a division. Stored on the
+ * division (not the competition or league_config) because they describe a
+ * season-end policy that has to apply uniformly across this tier — even
+ * if the division has multiple competitions or none yet.
+ */
+export async function updateDivisionPromoteCount(
+  id: string,
+  promote_count: number
+): Promise<{ success: boolean; error?: string }> {
+  if (!Number.isInteger(promote_count) || promote_count < 0) {
+    return {
+      success: false,
+      error: "promote_count must be a non-negative integer",
+    };
+  }
+  if (!isSupabaseConfigured()) {
+    const row = MOCK_COMP_DIVISIONS.find((d) => d.id === id);
+    if (!row) return { success: false, error: "Division not found" };
+    row.promote_count = promote_count;
+    return { success: true };
+  }
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("comp_divisions")
+    .update({ promote_count })
+    .eq("id", id);
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
+export async function updateDivisionRelegateCount(
+  id: string,
+  relegate_count: number
+): Promise<{ success: boolean; error?: string }> {
+  if (!Number.isInteger(relegate_count) || relegate_count < 0) {
+    return {
+      success: false,
+      error: "relegate_count must be a non-negative integer",
+    };
+  }
+  if (!isSupabaseConfigured()) {
+    const row = MOCK_COMP_DIVISIONS.find((d) => d.id === id);
+    if (!row) return { success: false, error: "Division not found" };
+    row.relegate_count = relegate_count;
+    return { success: true };
+  }
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("comp_divisions")
+    .update({ relegate_count })
+    .eq("id", id);
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
+/**
+ * S24b2: find the division at `(season_id, league_name, target_tier)`.
+ * Returns null if no such division exists. Used by the finalize action to
+ * resolve promote/relegate/stay targets in the next season.
+ */
+export async function findDivisionByTier(args: {
+  season_id: string;
+  league_name: string;
+  tier: number;
+}): Promise<Division | null> {
+  if (!isSupabaseConfigured()) {
+    return (
+      MOCK_COMP_DIVISIONS.find(
+        (d) =>
+          d.season_id === args.season_id &&
+          d.league_name === args.league_name &&
+          d.tier === args.tier
+      ) ?? null
+    );
+  }
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("comp_divisions")
+    .select("*")
+    .eq("season_id", args.season_id)
+    .eq("league_name", args.league_name)
+    .eq("tier", args.tier)
+    .maybeSingle();
+  return (data as Division | null) ?? null;
 }
 
 /**

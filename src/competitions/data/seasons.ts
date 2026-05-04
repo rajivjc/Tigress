@@ -87,6 +87,7 @@ export async function createSeason(
       starts_at: input.starts_at,
       ends_at: input.ends_at,
       status: "planned",
+      next_season_id: null,
       created_at: nowIso,
       updated_at: nowIso,
     });
@@ -141,4 +142,36 @@ export async function archiveSeason(
   id: string
 ): Promise<{ success: boolean; error?: string }> {
   return updateSeasonStatus(id, "archived");
+}
+
+/**
+ * S24b2: point a season at the season that follows it. Required before
+ * promotion/relegation finalize can resolve target divisions. `null`
+ * clears the pointer.
+ */
+export async function setNextSeasonId(
+  id: string,
+  nextSeasonId: string | null
+): Promise<{ success: boolean; error?: string }> {
+  if (nextSeasonId !== null && nextSeasonId === id) {
+    return { success: false, error: "A season cannot follow itself" };
+  }
+  if (!isSupabaseConfigured()) {
+    const row = MOCK_COMP_SEASONS.find((s) => s.id === id);
+    if (!row) return { success: false, error: "Season not found" };
+    if (nextSeasonId !== null) {
+      const next = MOCK_COMP_SEASONS.find((s) => s.id === nextSeasonId);
+      if (!next) return { success: false, error: "Next season not found" };
+    }
+    row.next_season_id = nextSeasonId;
+    row.updated_at = new Date().toISOString();
+    return { success: true };
+  }
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("comp_seasons")
+    .update({ next_season_id: nextSeasonId })
+    .eq("id", id);
+  if (error) return { success: false, error: error.message };
+  return { success: true };
 }

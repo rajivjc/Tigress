@@ -3,6 +3,7 @@ import {
   archiveTeam,
   createTeam,
   getTeam,
+  getTeamsByIds,
   listTeams,
   updateTeam,
 } from "@/competitions/data/teams";
@@ -87,5 +88,25 @@ describe("competitions teams + roster data layer (mock mode)", () => {
     const res = await addToRoster("comp-team-felt-tips", "mock-member-row-1");
     expect(res.success).toBe(false);
     expect(res.error).toMatch(/already/i);
+  });
+
+  // S24b2 — batched team lookup
+  it("getTeamsByIds returns a map keyed by team id", async () => {
+    const teamMap = await getTeamsByIds([
+      "comp-team-felt-tips",
+      "comp-team-chalk-dust",
+    ]);
+    expect(teamMap.size).toBe(2);
+    expect(teamMap.get("comp-team-felt-tips")?.name).toBe("Felt Tips");
+    expect(teamMap.get("comp-team-chalk-dust")?.name).toBe("Chalk Dust");
+  });
+
+  it("getTeamsByIds omits ids that don't exist", async () => {
+    const teamMap = await getTeamsByIds([
+      "comp-team-felt-tips",
+      "ghost-team-id",
+    ]);
+    expect(teamMap.size).toBe(1);
+    expect(teamMap.has("ghost-team-id")).toBe(false);
   });
 });

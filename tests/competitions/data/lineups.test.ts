@@ -3,6 +3,7 @@ import {
   clearLineup,
   getBlockingApprovalState,
   getLineup,
+  listPendingApprovalsForCaptain,
   listRejectedSubstitutionsForCaptain,
   setLineup,
 } from "@/competitions/data/lineups";
@@ -215,6 +216,33 @@ describe("listRejectedSubstitutionsForCaptain", () => {
     });
     const rows = await listRejectedSubstitutionsForCaptain(FELT_CAPTAIN);
     expect(rows).toEqual([]);
+  });
+
+  // S24b2 — view-backed pending lookup
+  it("listPendingApprovalsForCaptain surfaces rows to the OPPOSING captain", async () => {
+    const nowIso = new Date().toISOString();
+    MOCK_COMP_MATCH_LINEUPS.push({
+      match_id: MATCH_ID,
+      entrant_id: "comp-entrant-sp-felt",
+      member_id: "mock-member-row-2",
+      side: "a", // Felt Tips side — opposing captain (Cue Crew) decides
+      recorded_at: nowIso,
+      approval_status: "pending",
+      approved_by_member_id: null,
+      approved_at: null,
+      approval_note: null,
+    });
+    const cueRows = await listPendingApprovalsForCaptain(CUE_CAPTAIN);
+    expect(cueRows.length).toBe(1);
+    expect(cueRows[0]).toMatchObject({
+      matchId: MATCH_ID,
+      subSide: "a",
+      subEntrantId: "comp-entrant-sp-felt",
+      subMemberId: "mock-member-row-2",
+    });
+    // Felt captain (own side) should NOT see it on the pending list.
+    const feltRows = await listPendingApprovalsForCaptain(FELT_CAPTAIN);
+    expect(feltRows).toEqual([]);
   });
 
   it("ignores rejections on the opposing side", async () => {

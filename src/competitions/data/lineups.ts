@@ -461,67 +461,39 @@ export async function listPendingApprovalsForCaptain(
     }
     return out;
   }
-  // Real-mode: pull every pending row, then join in memory. Pending rows
-  // are rare so this is still cheap; future optimisation could push the
-  // captain-equality check into a SQL view.
+  // S24b2: one round trip via `v_lineup_approvals_for_captain` — the view
+  // pre-joins comp_matches → comp_competition_entrants → comp_teams and
+  // exposes `interested_captain_member_id` for the OPPOSING side, so the
+  // entire pending-for-captain lookup collapses to a single equality
+  // filter. No N+1.
   const supabase = createClient();
   let query = supabase
-    .from("comp_match_lineups")
+    .from("v_lineup_approvals_for_captain")
     .select(
-      "match_id, entrant_id, side, member_id, comp_matches!inner(competition_id, entrant_a_id, entrant_b_id, fixture_id)"
+      "match_id, sub_entrant_id, sub_side, sub_member_id, competition_id, fixture_id"
     )
-    .eq("approval_status", "pending");
+    .eq("approval_status", "pending")
+    .eq("interested_captain_member_id", captainMemberId);
   if (competitionId) {
-    query = query.eq("comp_matches.competition_id", competitionId);
+    query = query.eq("competition_id", competitionId);
   }
   const { data } = await query;
   type Row = {
     match_id: string;
-    entrant_id: string;
-    side: LineupSide;
-    member_id: string;
-    comp_matches: {
-      competition_id: string;
-      entrant_a_id: string | null;
-      entrant_b_id: string | null;
-      fixture_id: string | null;
-    };
+    sub_entrant_id: string;
+    sub_side: LineupSide;
+    sub_member_id: string;
+    competition_id: string;
+    fixture_id: string | null;
   };
-  const rows = (data as Row[] | null) ?? [];
-  const out: PendingApprovalRow[] = [];
-  for (const row of rows) {
-    const opposingEntrantId =
-      row.side === "a"
-        ? row.comp_matches.entrant_b_id
-        : row.comp_matches.entrant_a_id;
-    if (!opposingEntrantId) continue;
-    const { data: entrantData } = await supabase
-      .from("comp_competition_entrants")
-      .select("entrant_team_id")
-      .eq("id", opposingEntrantId)
-      .maybeSingle();
-    const teamId = (entrantData as { entrant_team_id: string | null } | null)
-      ?.entrant_team_id;
-    if (!teamId) continue;
-    const { data: teamData } = await supabase
-      .from("comp_teams")
-      .select("captain_member_id")
-      .eq("id", teamId)
-      .maybeSingle();
-    const captainId =
-      (teamData as { captain_member_id: string | null } | null)
-        ?.captain_member_id ?? null;
-    if (captainId !== captainMemberId) continue;
-    out.push({
-      matchId: row.match_id,
-      competitionId: row.comp_matches.competition_id,
-      fixtureId: row.comp_matches.fixture_id,
-      subSide: row.side,
-      subEntrantId: row.entrant_id,
-      subMemberId: row.member_id,
-    });
-  }
-  return out;
+  return ((data as Row[] | null) ?? []).map((row) => ({
+    matchId: row.match_id,
+    competitionId: row.competition_id,
+    fixtureId: row.fixture_id,
+    subSide: row.sub_side,
+    subEntrantId: row.sub_entrant_id,
+    subMemberId: row.sub_member_id,
+  }));
 }
 
 async function getTeamCaptain(teamId: string): Promise<string | null> {
@@ -583,70 +555,43 @@ export async function listRejectedSubstitutionsForCaptain(
     }
     return out;
   }
+  // S24b2: same view-backed lookup as the pending list, but filtered to
+  // 'rejected' rows where `interested_captain_member_id` selects the OWN
+  // side — i.e. the captain who has to clear and resubmit.
   const supabase = createClient();
   let query = supabase
-    .from("comp_match_lineups")
+    .from("v_lineup_approvals_for_captain")
     .select(
-      "match_id, entrant_id, side, member_id, approved_by_member_id, approved_at, approval_note, comp_matches!inner(competition_id, entrant_a_id, entrant_b_id, fixture_id)"
+      "match_id, sub_entrant_id, sub_side, sub_member_id, competition_id, fixture_id, approved_by_member_id, approved_at, approval_note"
     )
-    .eq("approval_status", "rejected");
+    .eq("approval_status", "rejected")
+    .eq("interested_captain_member_id", captainMemberId);
   if (competitionId) {
-    query = query.eq("comp_matches.competition_id", competitionId);
+    query = query.eq("competition_id", competitionId);
   }
   const { data } = await query;
   type Row = {
     match_id: string;
-    entrant_id: string;
-    side: LineupSide;
-    member_id: string;
+    sub_entrant_id: string;
+    sub_side: LineupSide;
+    sub_member_id: string;
+    competition_id: string;
+    fixture_id: string | null;
     approved_by_member_id: string | null;
     approved_at: string | null;
     approval_note: string | null;
-    comp_matches: {
-      competition_id: string;
-      entrant_a_id: string | null;
-      entrant_b_id: string | null;
-      fixture_id: string | null;
-    };
   };
-  const rows = (data as Row[] | null) ?? [];
-  const out: RejectedSubstitutionRow[] = [];
-  for (const row of rows) {
-    const ownEntrantId =
-      row.side === "a"
-        ? row.comp_matches.entrant_a_id
-        : row.comp_matches.entrant_b_id;
-    if (!ownEntrantId) continue;
-    const { data: entrantData } = await supabase
-      .from("comp_competition_entrants")
-      .select("entrant_team_id")
-      .eq("id", ownEntrantId)
-      .maybeSingle();
-    const teamId = (entrantData as { entrant_team_id: string | null } | null)
-      ?.entrant_team_id;
-    if (!teamId) continue;
-    const { data: teamData } = await supabase
-      .from("comp_teams")
-      .select("captain_member_id")
-      .eq("id", teamId)
-      .maybeSingle();
-    const captainId =
-      (teamData as { captain_member_id: string | null } | null)
-        ?.captain_member_id ?? null;
-    if (captainId !== captainMemberId) continue;
-    out.push({
-      matchId: row.match_id,
-      competitionId: row.comp_matches.competition_id,
-      fixtureId: row.comp_matches.fixture_id,
-      subSide: row.side,
-      subEntrantId: row.entrant_id,
-      subMemberId: row.member_id,
-      rejectedByMemberId: row.approved_by_member_id,
-      rejectedAt: row.approved_at,
-      approvalNote: row.approval_note,
-    });
-  }
-  return out;
+  return ((data as Row[] | null) ?? []).map((row) => ({
+    matchId: row.match_id,
+    competitionId: row.competition_id,
+    fixtureId: row.fixture_id,
+    subSide: row.sub_side,
+    subEntrantId: row.sub_entrant_id,
+    subMemberId: row.sub_member_id,
+    rejectedByMemberId: row.approved_by_member_id,
+    rejectedAt: row.approved_at,
+    approvalNote: row.approval_note,
+  }));
 }
 
 /** Exported for mock-mode helpers — looks up the competition for a match. */

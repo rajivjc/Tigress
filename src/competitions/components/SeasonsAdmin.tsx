@@ -7,6 +7,7 @@ import {
   createSeasonAction,
   updateSeasonStatusAction,
 } from "../actions/seasons";
+import { setNextSeasonAction } from "../actions/promotion";
 import type { Season, SeasonStatus } from "../types";
 
 export function SeasonsAdmin({ seasons }: { seasons: Season[] }) {
@@ -126,9 +127,65 @@ export function SeasonsAdmin({ seasons }: { seasons: Season[] }) {
                 </button>
               )}
             </div>
+            <NextSeasonPicker season={s} allSeasons={seasons} />
           </li>
         ))}
       </ul>
     </div>
+  );
+}
+
+function NextSeasonPicker({
+  season,
+  allSeasons,
+}: {
+  season: Season;
+  allSeasons: Season[];
+}) {
+  const router = useRouter();
+  const [value, setValue] = useState<string>(season.next_season_id ?? "");
+  const [pending, startTransition] = useTransition();
+
+  const candidates = allSeasons.filter(
+    (s) => s.id !== season.id && s.starts_at >= season.starts_at
+  );
+
+  const save = (e: React.FormEvent) => {
+    e.preventDefault();
+    startTransition(async () => {
+      const res = await setNextSeasonAction(season.id, value === "" ? null : value);
+      if (!res.success) {
+        alert(res.error ?? "Failed");
+        return;
+      }
+      router.refresh();
+    });
+  };
+
+  return (
+    <form onSubmit={save} className="flex items-end gap-2 text-[11px] text-white/60">
+      <label className="flex flex-col gap-0.5">
+        <span className="uppercase tracking-wider text-white/40">Next season</span>
+        <select
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          className="rounded border border-white/10 bg-surface-2 px-2 py-1 text-white"
+        >
+          <option value="">— none —</option>
+          {candidates.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button
+        type="submit"
+        disabled={pending}
+        className="rounded border border-white/10 px-2 py-1 text-white/80 hover:bg-surface-2 disabled:opacity-50"
+      >
+        Save
+      </button>
+    </form>
   );
 }

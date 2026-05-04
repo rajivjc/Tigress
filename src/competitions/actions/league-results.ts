@@ -17,9 +17,16 @@ import { getCurrentActor } from "../data/players";
 import { getMatch, updateMatchStatus } from "../data/matches";
 import { listEntrants } from "../data/entrants";
 import { getTeam } from "../data/teams";
-import { getFixture, updateFixtureStatus } from "../data/fixtures";
+import {
+  getFixture,
+  getFixturesEnriched,
+  updateFixtureStatus,
+} from "../data/fixtures";
+import { listPairingsByFixtureIds } from "../data/fixture-pairings";
 import { recordResult } from "../data/match-results";
 import { getBlockingApprovalState } from "../data/lineups";
+import { findReplayRequiredItems } from "../data/league-standings";
+import { getCompetition } from "../data/competitions";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -28,6 +35,11 @@ import {
 } from "../data/mock-data";
 import { writeCompAuditLog } from "../audit";
 import { emitCompEvent } from "../events";
+import type {
+  StandingsFixtureInput,
+  StandingsPairingInput,
+  StandingsSubMatchInput,
+} from "../lib/standings";
 
 export interface ReportSubMatchResultInput {
   matchId: string;
@@ -157,8 +169,127 @@ export async function reportSubMatchResultAction(
   // flip the fixture to 'completed' and emit the placeholder event.
   const fixtureCompleted = await maybeAutoCompleteFixture(match.fixture_id);
 
+  // S24b2: when the fixture has just transitioned to completed under a
+  // `win_loss + replay_required` config, evaluate the affected fixture (or
+  // gala pairing) and emit a `comp.fixture.replay_required` audit row per
+  // tied pairing. Result corrections do NOT re-emit because the fixture is
+  // already completed when a manager re-records a result.
+  if (fixtureCompleted) {
+    await emitReplayRequiredIfApplicable({
+      fixtureId: match.fixture_id,
+      competitionId: match.competition_id,
+      actorId: actor.player.id,
+    });
+  }
+
   revalidatePath(`/competitions/${match.competition_id}`);
   return { success: true, fixtureCompleted };
+}
+
+/**
+ * S24b2: detect tied 2-team / gala pairings in `replay_required` mode and
+ * emit one audit row per impacted item. Single-fixture-scoped — never
+ * emits for fixtures other than the one we just auto-completed. Failures
+ * are swallowed by the audit helper, so this never blocks the action.
+ */
+async function emitReplayRequiredIfApplicable(args: {
+  fixtureId: string;
+  competitionId: string;
+  actorId: string;
+}): Promise<void> {
+  const comp = await getCompetition(args.competitionId);
+  if (!comp || comp.kind !== "league") return;
+  const config = comp.league_config;
+  if (!config) return;
+  if (config.points.rule !== "win_loss") return;
+  if (config.points.tied_sub_matches !== "replay_required") return;
+
+  const enriched = await getFixturesEnriched(args.competitionId);
+  const fx = enriched.find((f) => f.fixture.id === args.fixtureId);
+  if (!fx) return;
+
+  // Build the same StandingsFixtureInput shape the loader uses for the
+  // pre-pass — scoped to a single fixture.
+  let pairings: StandingsPairingInput[] | undefined;
+  if (fx.fixture.pairing_mode !== "two_team") {
+    const entrants = await listEntrants(args.competitionId);
+    const teamToEntrant = new Map<string, string>();
+    for (const e of entrants) {
+      if (e.entrant_team_id !== null) teamToEntrant.set(e.entrant_team_id, e.id);
+    }
+    const pairingsByFixture = await listPairingsByFixtureIds([args.fixtureId]);
+    const pairingRows = pairingsByFixture.get(args.fixtureId) ?? [];
+    pairings = pairingRows
+      .map((p): StandingsPairingInput | null => {
+        const homeEntrantId = teamToEntrant.get(p.home_team_id) ?? "";
+        const awayEntrantId = teamToEntrant.get(p.away_team_id) ?? "";
+        if (!homeEntrantId || !awayEntrantId) return null;
+        const subs: StandingsSubMatchInput[] = fx.subMatches
+          .filter((m) => m.pairing_id === p.id)
+          .map((m) => {
+            const result = fx.results.find((r) => r.match_id === m.id);
+            return {
+              matchId: m.id,
+              sideA: { entrantId: homeEntrantId },
+              sideB: { entrantId: awayEntrantId },
+              winnerEntrantId: result?.winner_entrant_id ?? null,
+              scoreA: result?.score_a,
+              scoreB: result?.score_b,
+            };
+          });
+        return {
+          pairingId: p.id,
+          homeEntrantId,
+          awayEntrantId,
+          subMatches: subs,
+        };
+      })
+      .filter((p): p is StandingsPairingInput => p !== null);
+  }
+
+  const subMatches: StandingsSubMatchInput[] = fx.subMatches
+    .filter((m) => m.pairing_id === null)
+    .map((m) => {
+      const result = fx.results.find((r) => r.match_id === m.id);
+      return {
+        matchId: m.id,
+        sideA: { entrantId: m.entrant_a_id ?? "" },
+        sideB: { entrantId: m.entrant_b_id ?? "" },
+        winnerEntrantId: result?.winner_entrant_id ?? null,
+        scoreA: result?.score_a,
+        scoreB: result?.score_b,
+      };
+    });
+
+  const fixtureInput: StandingsFixtureInput = {
+    id: fx.fixture.id,
+    homeEntrantId: fx.fixture.home_entrant_id,
+    awayEntrantId: fx.fixture.away_entrant_id,
+    status: fx.fixture.status,
+    isBye: fx.fixture.is_bye,
+    pairings,
+    subMatches,
+  };
+
+  const items = findReplayRequiredItems([fixtureInput], config);
+  for (const item of items) {
+    if (item.fixtureId !== args.fixtureId) continue;
+    const auditEntityId =
+      item.kind === "pairing" ? item.pairingId : item.fixtureId;
+    await writeCompAuditLog(
+      "comp.fixture.replay_required",
+      auditEntityId,
+      args.actorId,
+      {
+        kind: item.kind,
+        fixtureId: item.fixtureId,
+        ...(item.kind === "pairing" ? { pairingId: item.pairingId } : {}),
+        homeEntrantId: item.homeEntrantId,
+        awayEntrantId: item.awayEntrantId,
+        competitionId: args.competitionId,
+      }
+    );
+  }
 }
 
 async function maybeAutoCompleteFixture(fixtureId: string): Promise<boolean> {

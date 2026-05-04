@@ -21,6 +21,10 @@ import { WithdrawButton } from "@/competitions/components/WithdrawButton";
 import { PublishBracketButton } from "@/competitions/components/PublishBracketButton";
 import { PendingApprovalsList } from "@/competitions/components/PendingApprovalsList";
 import { RejectedSubstitutionsList } from "@/competitions/components/RejectedSubstitutionsList";
+import { PromotionFinalizePanel } from "@/competitions/components/PromotionFinalizePanel";
+import { PromotionHistoryPanel } from "@/competitions/components/PromotionHistoryPanel";
+import { listPromotionDecisionsForDivision } from "@/competitions/data/promotions";
+import { listDivisions } from "@/competitions/data/divisions";
 
 export const dynamic = "force-dynamic";
 
@@ -126,19 +130,54 @@ async function LeagueSections({
   );
 }
 
-async function ManagerLeagueControls({ divisionId }: { divisionId: string }) {
+async function ManagerLeagueControls({
+  divisionId,
+  entrantNames,
+}: {
+  divisionId: string;
+  entrantNames: Record<string, string>;
+}) {
   const division = await getDivision(divisionId);
   if (!division) return null;
+
+  // Promotion finalize / history panels: only render once season-end is in
+  // sight. The finalize panel takes the entrant name map for tied-boundary
+  // decisions; the history panel renders after finalize succeeds.
+  const finalized = division.promotions_finalized_at !== null;
+  const decisions = finalized
+    ? await listPromotionDecisionsForDivision(divisionId)
+    : [];
+  const targetDivisions = finalized ? await listDivisions() : [];
+  const divisionNames: Record<string, string> = {};
+  for (const d of targetDivisions) {
+    divisionNames[d.id] = `${d.league_name} · ${d.tier_name}`;
+  }
+
   return (
-    <section className="rounded-xl border border-white/10 bg-surface-1/70 p-4">
-      <p className="mb-3 text-[10px] uppercase tracking-wider text-white/40">
-        Schedule generator
-      </p>
-      <GenerateScheduleForm
-        seasonId={division.season_id}
-        divisionId={divisionId}
-      />
-    </section>
+    <>
+      <section className="rounded-xl border border-white/10 bg-surface-1/70 p-4">
+        <p className="mb-3 text-[10px] uppercase tracking-wider text-white/40">
+          Schedule generator
+        </p>
+        <GenerateScheduleForm
+          seasonId={division.season_id}
+          divisionId={divisionId}
+        />
+      </section>
+      {finalized ? (
+        <PromotionHistoryPanel
+          division={division}
+          decisions={decisions}
+          entrantNames={entrantNames}
+          divisionNames={divisionNames}
+        />
+      ) : (
+        <PromotionFinalizePanel
+          division={division}
+          divisionEntrantNames={entrantNames}
+        />
+      )}
+    </>
   );
 }
 
@@ -378,7 +417,19 @@ export default async function CompetitionDetailPage({
             viewerMemberId={member?.id ?? null}
           />
           {isManagerOrOwner && competition.division_id && (
-            <ManagerLeagueControls divisionId={competition.division_id} />
+            <ManagerLeagueControls
+              divisionId={competition.division_id}
+              entrantNames={Object.fromEntries(
+                entrants.map((e) => [
+                  e.entrant.id,
+                  e.subject?.kind === "team"
+                    ? e.subject.team.name
+                    : e.subject?.kind === "player"
+                      ? e.subject.player.displayName
+                      : "Unknown",
+                ])
+              )}
+            />
           )}
         </>
       )}
