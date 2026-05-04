@@ -19,14 +19,18 @@ import { revalidatePath } from "next/cache";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentActor } from "../data/players";
-import { listCompetitions } from "../data/competitions";
 import { listEntrants } from "../data/entrants";
 import {
   bulkCreateFixtures,
   countFixturesByCompetition,
   deleteFixturesByCompetition,
+  listFixtures,
 } from "../data/fixtures";
-import { generateRoundRobin, type ScheduleCadence } from "../lib/schedule";
+import {
+  generateRoundRobin,
+  type GeneratedFixture,
+  type ScheduleCadence,
+} from "../lib/schedule";
 import { writeCompAuditLog } from "../audit";
 import { MOCK_COMP_COMPETITIONS } from "../data/mock-data";
 import type { Competition } from "../types";
@@ -34,10 +38,23 @@ import type { Competition } from "../types";
 export type GeneratorMode = "empty" | "append" | "regenerate";
 
 export type GenerateSeasonFixturesInput = {
+  /**
+   * Season ID. Currently informational — the generator resolves the league
+   * competition via `divisionId` alone, since each division belongs to a
+   * single season (`comp_divisions.season_id` is FK-unique). Carried in the
+   * input for symmetry with other action signatures and audited in the
+   * event payload.
+   */
   seasonId: string;
   divisionId: string;
   mode: GeneratorMode;
   rounds: 1 | 2;
+  /**
+   * Cadence + start date are honoured for `empty` and `regenerate` modes.
+   * They are **ignored** in `append` mode — appended pairings are ad-hoc
+   * additions for late-joining teams and don't participate in the cadence-
+   * driven rollout. The caller's UI should surface this.
+   */
   startDate?: string;
   cadence?: ScheduleCadence;
   /** Required when mode === 'regenerate'. */
@@ -104,8 +121,10 @@ export async function generateSeasonFixtures(
     return { success: false, error: "Need at least 2 active team entrants" };
   }
   const teamIdToEntrantId = new Map<string, string>();
+  const entrantIdToTeamId = new Map<string, string>();
   for (const e of activeTeamEntrants) {
     teamIdToEntrantId.set(e.entrant_team_id!, e.id);
+    entrantIdToTeamId.set(e.id, e.entrant_team_id!);
   }
   const teamIds = activeTeamEntrants.map((e) => e.entrant_team_id!);
 
@@ -120,13 +139,15 @@ export async function generateSeasonFixtures(
     wiped = del.deleted ?? 0;
   }
 
-  let generated;
+  let generated: GeneratedFixture[];
   try {
     generated = generateRoundRobin({
       teamIds,
       rounds: input.rounds,
-      startDate: input.startDate,
-      cadence: input.cadence,
+      // Append mode never date-stamps — appended fixtures are ad-hoc and
+      // don't participate in cadence-driven rollout.
+      startDate: input.mode === "append" ? undefined : input.startDate,
+      cadence: input.mode === "append" ? undefined : input.cadence,
     });
   } catch (err) {
     return {
@@ -135,12 +156,83 @@ export async function generateSeasonFixtures(
     };
   }
 
+  // Append: keep only pairings that don't already have an existing fixture,
+  // drop bye rows entirely (a late team can't retroactively introduce byes
+  // into already-played rounds), and assign new round numbers continuing
+  // past the existing max.
+  if (input.mode === "append") {
+    const existing = await listFixtures({ competitionId: competition.id });
+
+    const existingPairCounts = new Map<string, number>();
+    let maxExistingRound = 0;
+    for (const fx of existing) {
+      if (fx.round_number !== null && fx.round_number > maxExistingRound) {
+        maxExistingRound = fx.round_number;
+      }
+      if (fx.is_bye) continue;
+      if (fx.home_entrant_id === null || fx.away_entrant_id === null) continue;
+      const homeTeam = entrantIdToTeamId.get(fx.home_entrant_id);
+      const awayTeam = entrantIdToTeamId.get(fx.away_entrant_id);
+      if (!homeTeam || !awayTeam) continue;
+      const key = pairKey(homeTeam, awayTeam);
+      existingPairCounts.set(key, (existingPairCounts.get(key) ?? 0) + 1);
+    }
+
+    const remaining = new Map(existingPairCounts);
+    const survivors: GeneratedFixture[] = [];
+    for (const g of generated) {
+      if (g.isBye) continue;
+      if (g.homeTeamId === null || g.awayTeamId === null) continue;
+      const key = pairKey(g.homeTeamId, g.awayTeamId);
+      const remainingCount = remaining.get(key) ?? 0;
+      if (remainingCount > 0) {
+        // Pair already represented in existing fixtures — consume one
+        // instance so a `rounds: 2` request that's missing the second
+        // mirror still surfaces it as a surviving pair.
+        remaining.set(key, remainingCount - 1);
+        continue;
+      }
+      survivors.push(g);
+    }
+
+    let nextRound = maxExistingRound + 1;
+    generated = survivors.map((g) => ({
+      ...g,
+      roundNumber: nextRound++,
+      scheduledAt: null,
+    }));
+  }
+
+  if (generated.length === 0 && input.mode === "append") {
+    await writeCompAuditLog(
+      "comp.season.fixtures_generated",
+      competition.id,
+      actor.player.id,
+      {
+        seasonId: input.seasonId,
+        divisionId: input.divisionId,
+        competitionId: competition.id,
+        mode: input.mode,
+        rounds: input.rounds,
+        generated: 0,
+        appended: 0,
+      }
+    );
+    revalidatePath(`/competitions/${competition.id}`);
+    revalidatePath("/leagues");
+    revalidatePath("/leagues/seasons");
+    revalidatePath("/leagues/divisions");
+    return { success: true, generated: 0 };
+  }
+
   const rows = generated.map((g) => ({
     generated: g,
     homeEntrantId:
       g.homeTeamId !== null ? teamIdToEntrantId.get(g.homeTeamId) ?? null : null,
     awayEntrantId:
       g.awayTeamId !== null ? teamIdToEntrantId.get(g.awayTeamId) ?? null : null,
+    byeEntrantId:
+      g.byeTeamId !== null ? teamIdToEntrantId.get(g.byeTeamId) ?? null : null,
   }));
 
   const insert = await bulkCreateFixtures(competition.id, rows);
@@ -163,13 +255,20 @@ export async function generateSeasonFixtures(
       rounds: input.rounds,
       generated: insertedCount,
       wiped: input.mode === "regenerate" ? wiped : undefined,
+      appended: input.mode === "append" ? insertedCount : undefined,
     }
   );
 
   revalidatePath(`/competitions/${competition.id}`);
   revalidatePath("/leagues");
+  revalidatePath("/leagues/seasons");
+  revalidatePath("/leagues/divisions");
 
   return input.mode === "regenerate"
     ? { success: true, generated: insertedCount, wiped }
     : { success: true, generated: insertedCount };
+}
+
+function pairKey(a: string, b: string): string {
+  return [a, b].sort().join("|");
 }

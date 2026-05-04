@@ -111,9 +111,12 @@ function FixtureGroup({
           }
           let label: React.ReactNode;
           if (f.is_bye) {
+            const byeName = f.bye_entrant_id
+              ? entrantNames.get(f.bye_entrant_id) ?? "Unknown"
+              : "TBD";
             label = (
               <p className="text-sm text-white/70">
-                BYE <span className="text-white/40">— {home}</span>
+                BYE <span className="text-white/40">— {byeName}</span>
               </p>
             );
           } else if (isGala) {

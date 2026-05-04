@@ -118,10 +118,9 @@ describe("generateRoundRobin — odd N (byes)", () => {
     }
   });
 
-  it("odd N — every team gets exactly one bye per single cycle", () => {
+  it("odd N — every team gets exactly one bye per single cycle (consistency: byeTeamId matches the team missing from real fixtures)", () => {
     const teams = ids(5);
     const out = generateRoundRobin({ teamIds: teams, rounds: 1 });
-    // Bye target = "the team in the round that's missing from real fixtures".
     const byeRecipients = new Map<string, number>(teams.map((t) => [t, 0]));
     const rs = rounds(out);
     for (const [, list] of rs) {
@@ -134,11 +133,40 @@ describe("generateRoundRobin — odd N (byes)", () => {
       }
       const sitting = teams.filter((t) => !playing.has(t));
       expect(sitting).toHaveLength(1);
+      const byeFx = list.find((f) => f.isBye)!;
+      expect(byeFx.byeTeamId).toBe(sitting[0]!);
       byeRecipients.set(sitting[0]!, byeRecipients.get(sitting[0]!)! + 1);
     }
     for (const t of teams) {
       expect(byeRecipients.get(t)).toBe(1);
     }
+  });
+
+  it("odd N — bye recipients are recorded directly on the fixture", () => {
+    const teams = ids(5);
+    const out = generateRoundRobin({ teamIds: teams, rounds: 1 });
+    const byeCounts = new Map<string, number>(teams.map((t) => [t, 0]));
+    for (const fx of byes(out)) {
+      expect(fx.byeTeamId).not.toBeNull();
+      byeCounts.set(fx.byeTeamId!, (byeCounts.get(fx.byeTeamId!) ?? 0) + 1);
+    }
+    for (const t of teams) expect(byeCounts.get(t)).toBe(1);
+  });
+
+  it("non-bye fixtures have byeTeamId null", () => {
+    const out = generateRoundRobin({ teamIds: ids(5), rounds: 1 });
+    for (const fx of realFixtures(out)) expect(fx.byeTeamId).toBeNull();
+  });
+
+  it("double RR with odd N — every team gets exactly two byes", () => {
+    const teams = ids(5);
+    const out = generateRoundRobin({ teamIds: teams, rounds: 2 });
+    const byeCounts = new Map<string, number>(teams.map((t) => [t, 0]));
+    for (const fx of byes(out)) {
+      expect(fx.byeTeamId).not.toBeNull();
+      byeCounts.set(fx.byeTeamId!, (byeCounts.get(fx.byeTeamId!) ?? 0) + 1);
+    }
+    for (const t of teams) expect(byeCounts.get(t)).toBe(2);
   });
 });
 

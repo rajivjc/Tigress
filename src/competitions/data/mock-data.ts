@@ -955,6 +955,7 @@ export const MOCK_COMP_FIXTURES: Fixture[] = [
     away_entrant_id: "comp-entrant-sp-chalk",
     round_number: null,
     is_bye: false,
+    bye_entrant_id: null,
     pairing_mode: "two_team",
     status: "completed",
     notes: null,
@@ -971,6 +972,7 @@ export const MOCK_COMP_FIXTURES: Fixture[] = [
     away_entrant_id: "comp-entrant-sp-break",
     round_number: null,
     is_bye: false,
+    bye_entrant_id: null,
     pairing_mode: "two_team",
     status: "completed",
     notes: null,
@@ -986,6 +988,7 @@ export const MOCK_COMP_FIXTURES: Fixture[] = [
     away_entrant_id: "comp-entrant-sp-cue",
     round_number: null,
     is_bye: false,
+    bye_entrant_id: null,
     pairing_mode: "two_team",
     status: "in_progress",
     notes: null,
@@ -1001,6 +1004,7 @@ export const MOCK_COMP_FIXTURES: Fixture[] = [
     away_entrant_id: "comp-entrant-sp-break",
     round_number: null,
     is_bye: false,
+    bye_entrant_id: null,
     pairing_mode: "two_team",
     status: "scheduled",
     notes: null,
@@ -1387,3 +1391,13 @@ export const MOCK_COMP_MATCH_LINEUPS: MatchLineup[] = [
 // push to this array when creating gala fixtures.
 // ---------------------------------------------------------------------------
 export const MOCK_COMP_FIXTURE_PAIRINGS: FixturePairing[] = [];
+
+// ---------------------------------------------------------------------------
+// S24a: gala fixture participants — empty by default. Centralised here (not
+// module-local in fixture-participants.ts) so resetMockData() can reset it
+// between tests like every other comp_* mock array.
+// ---------------------------------------------------------------------------
+export const MOCK_COMP_FIXTURE_PARTICIPANTS: {
+  fixture_id: string;
+  entrant_id: string;
+}[] = [];

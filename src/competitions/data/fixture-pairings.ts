@@ -8,7 +8,12 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
-import { MOCK_COMP_FIXTURE_PAIRINGS } from "./mock-data";
+import {
+  MOCK_COMP_FIXTURE_PAIRINGS,
+  MOCK_COMP_MATCHES,
+  MOCK_COMP_MATCH_LINEUPS,
+  MOCK_COMP_MATCH_RESULTS,
+} from "./mock-data";
 import type { FixturePairing } from "../types";
 
 function randomId(prefix: string): string {
@@ -30,6 +35,43 @@ export async function listPairingsByFixture(
     .eq("fixture_id", fixtureId)
     .order("pairing_order", { ascending: true });
   return (data as FixturePairing[] | null) ?? [];
+}
+
+/**
+ * Batched variant of `listPairingsByFixture` — single round trip for all
+ * fixtures in a competition. Used by the standings loader to avoid N+1
+ * queries when a league has many gala fixtures.
+ */
+export async function listPairingsByFixtureIds(
+  fixtureIds: string[]
+): Promise<Map<string, FixturePairing[]>> {
+  const out = new Map<string, FixturePairing[]>();
+  if (fixtureIds.length === 0) return out;
+  if (!isSupabaseConfigured()) {
+    const idSet = new Set(fixtureIds);
+    for (const p of MOCK_COMP_FIXTURE_PAIRINGS) {
+      if (!idSet.has(p.fixture_id)) continue;
+      const arr = out.get(p.fixture_id) ?? [];
+      arr.push(p);
+      out.set(p.fixture_id, arr);
+    }
+    for (const arr of out.values()) {
+      arr.sort((a, b) => a.pairing_order - b.pairing_order);
+    }
+    return out;
+  }
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("comp_fixture_pairings")
+    .select("*")
+    .in("fixture_id", fixtureIds)
+    .order("pairing_order", { ascending: true });
+  for (const row of (data as FixturePairing[] | null) ?? []) {
+    const arr = out.get(row.fixture_id) ?? [];
+    arr.push(row);
+    out.set(row.fixture_id, arr);
+  }
+  return out;
 }
 
 export interface CreatePairingInput {
@@ -92,9 +134,31 @@ export async function deletePairingsByFixture(
   fixtureId: string
 ): Promise<{ success: boolean; error?: string }> {
   if (!isSupabaseConfigured()) {
+    // Mirror the real schema's FK chain — pairing → matches (via pairing_id
+    // ON DELETE CASCADE) → lineups + results (via match_id ON DELETE CASCADE).
+    const pairingIds = new Set<string>();
     for (let i = MOCK_COMP_FIXTURE_PAIRINGS.length - 1; i >= 0; i--) {
       if (MOCK_COMP_FIXTURE_PAIRINGS[i]!.fixture_id === fixtureId) {
+        pairingIds.add(MOCK_COMP_FIXTURE_PAIRINGS[i]!.id);
         MOCK_COMP_FIXTURE_PAIRINGS.splice(i, 1);
+      }
+    }
+    const matchIds = new Set<string>();
+    for (let i = MOCK_COMP_MATCHES.length - 1; i >= 0; i--) {
+      const pid = MOCK_COMP_MATCHES[i]!.pairing_id;
+      if (pid !== null && pairingIds.has(pid)) {
+        matchIds.add(MOCK_COMP_MATCHES[i]!.id);
+        MOCK_COMP_MATCHES.splice(i, 1);
+      }
+    }
+    for (let i = MOCK_COMP_MATCH_LINEUPS.length - 1; i >= 0; i--) {
+      if (matchIds.has(MOCK_COMP_MATCH_LINEUPS[i]!.match_id)) {
+        MOCK_COMP_MATCH_LINEUPS.splice(i, 1);
+      }
+    }
+    for (let i = MOCK_COMP_MATCH_RESULTS.length - 1; i >= 0; i--) {
+      if (matchIds.has(MOCK_COMP_MATCH_RESULTS[i]!.match_id)) {
+        MOCK_COMP_MATCH_RESULTS.splice(i, 1);
       }
     }
     return { success: true };

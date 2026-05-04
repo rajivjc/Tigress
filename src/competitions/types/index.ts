@@ -283,6 +283,9 @@ export interface Fixture {
    *  legacy / manually created fixtures. */
   round_number: number | null;
   is_bye: boolean;
+  /** S24a-fix: when is_bye is true, the entrant sitting out. Lets the UI
+   *  render the team name without recomputing it from round membership. */
+  bye_entrant_id: string | null;
   pairing_mode: FixturePairingMode;
   created_at: string;
   updated_at: string;

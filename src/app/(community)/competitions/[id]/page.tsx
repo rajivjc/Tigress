@@ -48,17 +48,25 @@ async function LeagueSections({
   }
 
   // Highlight the viewer's team entrant in the standings table when they're
-  // a roster member on a team in this competition.
+  // a roster member on a team in this competition. Roster lookups run in
+  // parallel — sequential awaits scale linearly with team count.
   let viewerEntrantId: string | undefined;
   if (viewerMemberId) {
-    for (const e of entrants) {
-      if (e.subject?.kind !== "team") continue;
-      const roster = await listRoster(e.subject.team.id);
-      if (roster.some((r) => r.member_id === viewerMemberId)) {
-        viewerEntrantId = e.entrant.id;
-        break;
-      }
-    }
+    const teamEntrants = entrants.flatMap((e) =>
+      e.subject?.kind === "team"
+        ? [{ entrantId: e.entrant.id, teamId: e.subject.team.id }]
+        : []
+    );
+    const rosters = await Promise.all(
+      teamEntrants.map(async (t) => ({
+        entrantId: t.entrantId,
+        roster: await listRoster(t.teamId),
+      }))
+    );
+    const match = rosters.find((r) =>
+      r.roster.some((m) => m.member_id === viewerMemberId)
+    );
+    viewerEntrantId = match?.entrantId;
   }
 
   return (

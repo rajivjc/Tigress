@@ -126,6 +126,9 @@ export async function createGala(input: CreateGalaInput): Promise<CreateGalaResu
   );
 
   revalidatePath(`/competitions/${input.competitionId}`);
+  revalidatePath("/leagues");
+  revalidatePath("/leagues/seasons");
+  revalidatePath("/leagues/divisions");
   return { success: true, id: fixture.id };
 }
 
@@ -227,5 +230,8 @@ export async function setGalaManualPairings(
   );
 
   revalidatePath(`/competitions/${fixture.competition_id}`);
+  revalidatePath("/leagues");
+  revalidatePath("/leagues/seasons");
+  revalidatePath("/leagues/divisions");
   return { success: true };
 }

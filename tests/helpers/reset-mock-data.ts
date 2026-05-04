@@ -45,6 +45,7 @@ import {
   MOCK_COMP_ENTRANTS,
   MOCK_COMP_FIXTURES,
   MOCK_COMP_FIXTURE_PAIRINGS,
+  MOCK_COMP_FIXTURE_PARTICIPANTS,
   MOCK_COMP_GAME_TYPES,
   MOCK_COMP_GUESTS,
   MOCK_COMP_MATCHES,
@@ -110,6 +111,8 @@ const initialCompFixtures: Fixture[] = clone(MOCK_COMP_FIXTURES);
 const initialCompFixturePairings: FixturePairing[] = clone(
   MOCK_COMP_FIXTURE_PAIRINGS
 );
+const initialCompFixtureParticipants: { fixture_id: string; entrant_id: string }[] =
+  clone(MOCK_COMP_FIXTURE_PARTICIPANTS);
 const initialCompLineups: MatchLineup[] = clone(MOCK_COMP_MATCH_LINEUPS);
 
 function replaceArray<T>(target: T[], source: T[]): void {
@@ -146,6 +149,7 @@ export function resetMockData(): void {
   replaceArray(MOCK_COMP_DIVISIONS, initialCompDivisions);
   replaceArray(MOCK_COMP_FIXTURES, initialCompFixtures);
   replaceArray(MOCK_COMP_FIXTURE_PAIRINGS, initialCompFixturePairings);
+  replaceArray(MOCK_COMP_FIXTURE_PARTICIPANTS, initialCompFixtureParticipants);
   replaceArray(MOCK_COMP_MATCH_LINEUPS, initialCompLineups);
   // Lazy-created instances are always cleared — they rebuild on first access.
   MOCK_CHECKLIST_INSTANCES.length = 0;
