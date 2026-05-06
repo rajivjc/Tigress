@@ -57,6 +57,24 @@ import {
   MOCK_COMP_TEAMS,
   MOCK_COMP_TEAM_MEMBERS,
 } from "@/competitions/data/mock-data";
+import {
+  MOCK_SCHEDULE_AVAILABILITY,
+  MOCK_SCHEDULE_DAY_COVERAGE,
+  MOCK_SCHEDULE_FT_ASSIGNMENTS,
+  MOCK_SCHEDULE_QUALIFICATIONS,
+  MOCK_SCHEDULE_SHIFTS,
+  MOCK_SCHEDULE_TEMPLATES,
+  MOCK_SCHEDULE_WEEKS,
+} from "@/scheduling/data/mock-data";
+import type {
+  AvailabilityBlock,
+  FtAssignment,
+  ScheduleShift,
+  ScheduleWeek,
+  ShiftTemplate,
+  TemplateDayCoverage,
+  UserQualification,
+} from "@/scheduling/types";
 import type {
   Competition,
   CompetitionEntrant,
@@ -119,6 +137,23 @@ const initialCompLineups: MatchLineup[] = clone(MOCK_COMP_MATCH_LINEUPS);
 const initialCompPromotionDecisions: PromotionDecision[] = clone(
   MOCK_COMP_PROMOTION_DECISIONS
 );
+const initialScheduleTemplates: ShiftTemplate[] = clone(
+  MOCK_SCHEDULE_TEMPLATES
+);
+const initialScheduleDayCoverage: TemplateDayCoverage[] = clone(
+  MOCK_SCHEDULE_DAY_COVERAGE
+);
+const initialScheduleQualifications: UserQualification[] = clone(
+  MOCK_SCHEDULE_QUALIFICATIONS
+);
+const initialScheduleFtAssignments: FtAssignment[] = clone(
+  MOCK_SCHEDULE_FT_ASSIGNMENTS
+);
+const initialScheduleAvailability: AvailabilityBlock[] = clone(
+  MOCK_SCHEDULE_AVAILABILITY
+);
+const initialScheduleWeeks: ScheduleWeek[] = clone(MOCK_SCHEDULE_WEEKS);
+const initialScheduleShifts: ScheduleShift[] = clone(MOCK_SCHEDULE_SHIFTS);
 
 function replaceArray<T>(target: T[], source: T[]): void {
   target.length = 0;
@@ -157,6 +192,13 @@ export function resetMockData(): void {
   replaceArray(MOCK_COMP_FIXTURE_PARTICIPANTS, initialCompFixtureParticipants);
   replaceArray(MOCK_COMP_MATCH_LINEUPS, initialCompLineups);
   replaceArray(MOCK_COMP_PROMOTION_DECISIONS, initialCompPromotionDecisions);
+  replaceArray(MOCK_SCHEDULE_TEMPLATES, initialScheduleTemplates);
+  replaceArray(MOCK_SCHEDULE_DAY_COVERAGE, initialScheduleDayCoverage);
+  replaceArray(MOCK_SCHEDULE_QUALIFICATIONS, initialScheduleQualifications);
+  replaceArray(MOCK_SCHEDULE_FT_ASSIGNMENTS, initialScheduleFtAssignments);
+  replaceArray(MOCK_SCHEDULE_AVAILABILITY, initialScheduleAvailability);
+  replaceArray(MOCK_SCHEDULE_WEEKS, initialScheduleWeeks);
+  replaceArray(MOCK_SCHEDULE_SHIFTS, initialScheduleShifts);
   // Lazy-created instances are always cleared — they rebuild on first access.
   MOCK_CHECKLIST_INSTANCES.length = 0;
   MOCK_CHECKLIST_INSTANCE_ITEMS.length = 0;

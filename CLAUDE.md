@@ -662,6 +662,133 @@ promotion/relegation, alternative configs).
   tiebreakers beyond the two listed, mid-season roster changes that
   affect already-played fixtures.
 
+## Scheduling foundation (Session 25)
+
+First scheduling session. Manager builds a weekly draft (auto-materialised
+from FT standing assignments), assigns staff to shifts, then publishes —
+which fires a Web Push to every assigned staff member. Staff submit PT
+availability per week and view the published schedule. No clock-in,
+swaps, or no-shows yet (S26); no payroll (S27).
+
+- **Module layout:** `src/scheduling/` (host-folded — no boundary test).
+  - `lib/coverage.ts`, `lib/materialize.ts`, `lib/availability-check.ts`
+    are pure functions covered by `tests/scheduling/lib/*.test.ts`.
+  - `data/templates.ts`, `data/qualifications.ts`,
+    `data/ft-assignments.ts`, `data/availability.ts`, `data/weeks.ts`
+    are dual-mode (mock + real) data accessors.
+  - `actions/templates.ts`, `actions/qualifications.ts`,
+    `actions/ft-assignments.ts`, `actions/availability.ts`,
+    `actions/weeks.ts` are the server-action surface.
+  - `audit.ts` writes `schedule.*` events into the existing
+    `audit_log` table.
+- **Schema (migration 018):**
+  - `schedule_shift_templates` — reusable shift definitions.
+  - `schedule_template_day_coverage` — per-(template, day_of_week)
+    role requirements (jsonb). Missing row = template doesn't run that
+    day.
+  - `user_qualifications` — many-to-many of staff -> qualification
+    (`bartender | floor | mod`).
+  - `schedule_ft_assignments` — recurring weekly contract for FT staff.
+    `(effective_from, effective_until)` window allows contract changes
+    without rewriting history.
+  - `schedule_availability` — PT submissions per (user, week). Multiple
+    blocks per day allowed.
+  - `schedule_weeks` — per-week container. Status:
+    `draft | published | archived`. Carries `published_at`,
+    `published_by`, and `publish_override_note`.
+  - `schedule_shifts` — concrete assigned shift rows. `user_id NULL` =
+    scaffolded slot waiting on a person; manager fills people in
+    second.
+- **Identity convention:** `user_id` columns reference
+  `public.staff(id)` directly — same convention as `comp_*` and
+  `checklist_*`. The S25 spec called for `auth.users` but the
+  codebase-wide convention is the staff PK; that's what the data
+  layer + RLS use.
+- **Mon=0..Sun=6:** week starts Monday.
+  `weekStartFor(date)` and `dayOfWeekFor(date)` in
+  `lib/materialize.ts` are the canonical converters; everything else
+  layers on top of them.
+- **RLS:**
+  - Templates + day-coverage + qualifications: read by every
+    authenticated staff, write by manager/owner.
+  - FT assignments + availability: read by self or manager/owner;
+    write by self (availability) or manager/owner (FT).
+  - `schedule_weeks`: drafts visible only to manager/owner; published
+    visible to all staff. Backed by SECURITY DEFINER helper
+    `schedule_user_can_see_shift(week_id)` so the per-shift policy
+    can re-use the same predicate.
+  - `schedule_shifts`: write manager/owner; read gated by the helper.
+- **Atomic RPCs:** `schedule_publish_week(week_id, publisher_id, note)`
+  and `schedule_unpublish_week(week_id)`. Mock mode runs the same
+  state transitions in-memory.
+- **Coverage gate on publish:** publish is blocked when any
+  (template, date, role) requirement is under-staffed UNLESS the
+  manager supplies an override note (`publishWeekAction({weekId,
+  overrideNote})` — first call returns `{requiresOverride: true,
+  gaps}`, second call with the note succeeds and writes
+  `schedule.week.published_with_override` instead of
+  `schedule.week.published`).
+- **Assignment validator (`assignUserToShiftAction`)** runs three
+  checks before writing:
+  1. User has the qualification for the shift's role.
+  2. PT availability covers `[start_time, end_time)` on that day, OR
+     FT standing assignment covers the (template, dow) on that date.
+  3. No same-day overlapping shift already assigned to the user.
+  All three are application-layer; the DB doesn't enforce them.
+- **Push notifications** reuse the existing Web Push pipeline via
+  new `sendPushToStaff(staffId, payload)` /
+  `sendPushToStaffMembers(staffIds, payload)` helpers in
+  `src/lib/push/send.ts`. Triggers:
+  - `publishWeekAction` → "Your shifts are up: N this week" to every
+    assigned staff.
+  - `unpublishWeekAction` → "Schedule … is being revised" to every
+    previously-assigned staff.
+  - `assignUserToShiftAction` after publish → "New shift assigned" to
+    the new assignee.
+  - `unassignUserFromShiftAction` after publish → "Shift removed" to
+    the previous assignee.
+  Tier 1 push subscriptions already accept `staff_id` so no schema
+  change was needed; the helpers added a staff lookup path alongside
+  the existing member ones.
+- **Routes:**
+  - `/staff/schedule` — published weekly view (all roles). Defaults to
+    "my shifts", toggle for full team.
+  - `/staff/availability` — PT submission widget. Two tabs (this week
+    + next week), day grid with multi-block support. FT staff see a
+    read-only banner explaining their FT contract covers everything.
+  - `/manager/scheduling` — build/publish workspace. Per-day cards
+    show scaffolded shifts + add-slot buttons; assign modal filters
+    eligible users client-side using the same pure
+    `isUserAvailableForShift` + `timeRangesOverlap` checks the server
+    action enforces.
+  - `/manager/settings/shift-templates` — template + per-day
+    coverage editor.
+  - `/manager/users` — staff list with qualification chips and FT
+    assignment add/end controls.
+- **Mock mode (`src/scheduling/data/mock-data.ts`):** AM/PM/Closer
+  templates with the spec's day coverage matrix; quals seeded for
+  every mock staff (FT all three, PT bartender or floor); two FT
+  standing assignments (Sam AM Mon-Fri bartender, Maya PM Mon-Fri
+  mod); seeded availability for the two new PT staff (Pat
+  `pat@tigress.test` and Phoebe `phoebe@tigress.test`, both
+  password "password"). Weeks + shifts are empty by default —
+  manager workflow creates them.
+- **Audit events added:** `schedule.template.created/updated/deleted`,
+  `schedule.template_day_coverage.set/removed`,
+  `schedule.qualifications.updated`,
+  `schedule.ft_assignment.created/ended`,
+  `schedule.availability.submitted/late_submitted`,
+  `schedule.week.created/copied_from`,
+  `schedule.shift.assigned/unassigned/time_overridden/removed`,
+  `schedule.week.published/published_with_override/unpublished`.
+- **PT availability deadline:** Friday 18:00 SGT for the following
+  week. Late submissions still go through but write
+  `schedule.availability.late_submitted` instead of
+  `schedule.availability.submitted` so manager review can find them.
+- **Out of scope this session:** clock-in/out, hours approval, swaps,
+  no-show tracking, payroll. Mid-week archive cron also deferred —
+  archiving is an explicit manager action for now.
+
 ### Environment variables
 
 | Name | Purpose | Required for |

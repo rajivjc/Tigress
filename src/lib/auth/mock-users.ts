@@ -99,6 +99,45 @@ export const MOCK_ACCOUNTS: MockAccount[] = [
       updated_at: now,
     } satisfies Staff,
   },
+  // Two part-time staff so the scheduling foundation has somebody to roster
+  // through the PT-availability path. Login flows use the same shared
+  // password as the rest of the mock accounts.
+  {
+    password: "password",
+    user: { id: "mock-pt-1", email: "pat@tigress.test" },
+    role: "staff",
+    profile: {
+      id: "mock-staff-row-4",
+      auth_user_id: "mock-pt-1",
+      full_name: "Pat Part-Time",
+      email: "pat@tigress.test",
+      phone: null,
+      role: "staff",
+      employment_type: "part_time",
+      hourly_rate_cents: null,
+      status: "active",
+      created_at: now,
+      updated_at: now,
+    } satisfies Staff,
+  },
+  {
+    password: "password",
+    user: { id: "mock-pt-2", email: "phoebe@tigress.test" },
+    role: "staff",
+    profile: {
+      id: "mock-staff-row-5",
+      auth_user_id: "mock-pt-2",
+      full_name: "Phoebe Floor",
+      email: "phoebe@tigress.test",
+      phone: null,
+      role: "staff",
+      employment_type: "part_time",
+      hourly_rate_cents: null,
+      status: "active",
+      created_at: now,
+      updated_at: now,
+    } satisfies Staff,
+  },
 ];
 
 export function findMockAccount(
