@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutGrid,
   Calendar,
+  CalendarRange,
   ClipboardCheck,
   BookOpen,
   MessageCircle,
@@ -17,6 +18,7 @@ import {
 const links: Array<{ href: string; label: string; icon: LucideIcon }> = [
   { href: "/floor", label: "Floor", icon: LayoutGrid },
   { href: "/calendar", label: "Calendar", icon: Calendar },
+  { href: "/staff/schedule", label: "Shifts", icon: CalendarRange },
   { href: "/checklists", label: "Checks", icon: ClipboardCheck },
   { href: "/recipes", label: "Recipes", icon: BookOpen },
   { href: "/competitions", label: "Compete", icon: Trophy },

@@ -166,6 +166,43 @@ export async function getSubscriptionsForMembers(
   return (data as PushSubscriptionRow[] | null) ?? [];
 }
 
+// ---------- getSubscriptionsForStaff ----------
+
+export async function getSubscriptionsForStaff(
+  staffId: string
+): Promise<PushSubscriptionRow[]> {
+  if (!isSupabaseConfigured()) {
+    return MOCK_PUSH_SUBSCRIPTIONS.filter((s) => s.staff_id === staffId);
+  }
+
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("push_subscriptions")
+    .select("*")
+    .eq("staff_id", staffId);
+  return (data as PushSubscriptionRow[] | null) ?? [];
+}
+
+export async function getSubscriptionsForStaffMembers(
+  staffIds: string[]
+): Promise<PushSubscriptionRow[]> {
+  if (staffIds.length === 0) return [];
+
+  if (!isSupabaseConfigured()) {
+    const set = new Set(staffIds);
+    return MOCK_PUSH_SUBSCRIPTIONS.filter(
+      (s) => s.staff_id !== null && set.has(s.staff_id)
+    );
+  }
+
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("push_subscriptions")
+    .select("*")
+    .in("staff_id", staffIds);
+  return (data as PushSubscriptionRow[] | null) ?? [];
+}
+
 // ---------- isSubscribed ----------
 
 export async function isSubscribed(

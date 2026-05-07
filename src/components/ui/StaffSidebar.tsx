@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import {
   LayoutGrid,
   Calendar,
+  CalendarClock,
+  CalendarRange,
   ClipboardCheck,
   BookOpen,
   CalendarDays,
@@ -28,6 +30,8 @@ type SidebarLink = { href: string; label: string; icon: LucideIcon };
 const staffLinks: SidebarLink[] = [
   { href: "/floor", label: "Floorplan", icon: LayoutGrid },
   { href: "/calendar", label: "Calendar", icon: Calendar },
+  { href: "/staff/schedule", label: "Schedule", icon: CalendarRange },
+  { href: "/staff/availability", label: "Availability", icon: CalendarClock },
   { href: "/checklists", label: "Checklists", icon: ClipboardCheck },
   { href: "/recipes", label: "Recipes", icon: BookOpen },
   { href: "/competitions", label: "Competitions", icon: Trophy },
@@ -37,7 +41,10 @@ const staffLinks: SidebarLink[] = [
 ];
 
 const managerLinks: SidebarLink[] = [
-  { href: "/checklists/templates", label: "Templates", icon: ListChecks },
+  { href: "/manager/scheduling", label: "Scheduling", icon: CalendarRange },
+  { href: "/manager/settings/shift-templates", label: "Shift templates", icon: ListChecks },
+  { href: "/manager/users", label: "Staff users", icon: Users },
+  { href: "/checklists/templates", label: "Checklist templates", icon: ListChecks },
   { href: "/checklists/history", label: "Checklist history", icon: History },
 ];
 

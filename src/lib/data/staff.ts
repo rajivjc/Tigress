@@ -58,3 +58,44 @@ export async function isCurrentUserManagerOrOwner(): Promise<boolean> {
   if (!current) return false;
   return current.role === "manager" || current.role === "owner";
 }
+
+/**
+ * Returns every active staff row. Used by the scheduling UI to populate
+ * assignment pickers and the qualifications editor.
+ */
+export async function listAllStaff(): Promise<Staff[]> {
+  if (!isSupabaseConfigured()) {
+    return MOCK_ACCOUNTS.filter((a) => a.role !== "member").map(
+      (a) => a.profile as Staff
+    );
+  }
+
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("staff")
+    .select("*")
+    .eq("status", "active")
+    .order("full_name", { ascending: true });
+  return (data as Staff[] | null) ?? [];
+}
+
+/**
+ * Fetch a single staff row by id. Used when stitching display names into
+ * UI rows that only carry the foreign key.
+ */
+export async function getStaffById(staffId: string): Promise<Staff | null> {
+  if (!isSupabaseConfigured()) {
+    const account = MOCK_ACCOUNTS.find(
+      (a) => a.role !== "member" && (a.profile as Staff).id === staffId
+    );
+    return account ? (account.profile as Staff) : null;
+  }
+
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("staff")
+    .select("*")
+    .eq("id", staffId)
+    .maybeSingle();
+  return (data as Staff | null) ?? null;
+}

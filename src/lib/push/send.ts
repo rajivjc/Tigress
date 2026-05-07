@@ -16,6 +16,8 @@ import webpush from "web-push";
 import {
   getSubscriptionsForMember,
   getSubscriptionsForMembers,
+  getSubscriptionsForStaff,
+  getSubscriptionsForStaffMembers,
   removeSubscription,
   type PushSubscriptionRow,
 } from "@/lib/data/push-subscriptions";
@@ -149,5 +151,35 @@ export async function sendPushToMembers(
     await sendToSubscriptions(subs, payload);
   } catch (err) {
     console.warn("[push] sendPushToMembers failed:", err);
+  }
+}
+
+/**
+ * Fire-and-forget push to every browser subscribed for a staff user. Used
+ * by the scheduling flow when a manager publishes a week or assigns a
+ * staff member to a shift after publish.
+ */
+export async function sendPushToStaff(
+  staffId: string,
+  payload: PushPayload
+): Promise<void> {
+  try {
+    const subs = await getSubscriptionsForStaff(staffId);
+    await sendToSubscriptions(subs, payload);
+  } catch (err) {
+    console.warn("[push] sendPushToStaff failed:", err);
+  }
+}
+
+export async function sendPushToStaffMembers(
+  staffIds: string[],
+  payload: PushPayload
+): Promise<void> {
+  if (staffIds.length === 0) return;
+  try {
+    const subs = await getSubscriptionsForStaffMembers(staffIds);
+    await sendToSubscriptions(subs, payload);
+  } catch (err) {
+    console.warn("[push] sendPushToStaffMembers failed:", err);
   }
 }
