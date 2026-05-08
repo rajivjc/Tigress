@@ -4,10 +4,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutGrid,
+  ArrowLeftRight,
   Calendar,
   CalendarClock,
   CalendarRange,
   ClipboardCheck,
+  Clock,
   BookOpen,
   CalendarDays,
   History,
@@ -32,6 +34,8 @@ const staffLinks: SidebarLink[] = [
   { href: "/calendar", label: "Calendar", icon: Calendar },
   { href: "/staff/schedule", label: "Schedule", icon: CalendarRange },
   { href: "/staff/availability", label: "Availability", icon: CalendarClock },
+  { href: "/staff/clock", label: "Clock", icon: Clock },
+  { href: "/staff/swaps", label: "Swaps", icon: ArrowLeftRight },
   { href: "/checklists", label: "Checklists", icon: ClipboardCheck },
   { href: "/recipes", label: "Recipes", icon: BookOpen },
   { href: "/competitions", label: "Competitions", icon: Trophy },
@@ -42,6 +46,8 @@ const staffLinks: SidebarLink[] = [
 
 const managerLinks: SidebarLink[] = [
   { href: "/manager/scheduling", label: "Scheduling", icon: CalendarRange },
+  { href: "/manager/scheduling/clock-review", label: "Clock review", icon: Clock },
+  { href: "/manager/scheduling/swaps", label: "Swap activity", icon: ArrowLeftRight },
   { href: "/manager/settings/shift-templates", label: "Shift templates", icon: ListChecks },
   { href: "/manager/users", label: "Staff users", icon: Users },
   { href: "/checklists/templates", label: "Checklist templates", icon: ListChecks },

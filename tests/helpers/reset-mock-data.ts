@@ -59,10 +59,15 @@ import {
 } from "@/competitions/data/mock-data";
 import {
   MOCK_SCHEDULE_AVAILABILITY,
+  MOCK_SCHEDULE_CLOCK_CORRECTIONS,
+  MOCK_SCHEDULE_CLOCK_RECORDS,
   MOCK_SCHEDULE_DAY_COVERAGE,
   MOCK_SCHEDULE_FT_ASSIGNMENTS,
   MOCK_SCHEDULE_QUALIFICATIONS,
   MOCK_SCHEDULE_SHIFTS,
+  MOCK_SCHEDULE_SHIFT_ATTENDANCE,
+  MOCK_SCHEDULE_SHIFT_CHANGE_REQUESTS,
+  MOCK_SCHEDULE_SHIFT_NOTIFICATIONS_SENT,
   MOCK_SCHEDULE_TEMPLATES,
   MOCK_SCHEDULE_WEEKS,
 } from "@/scheduling/data/mock-data";
@@ -202,4 +207,11 @@ export function resetMockData(): void {
   // Lazy-created instances are always cleared — they rebuild on first access.
   MOCK_CHECKLIST_INSTANCES.length = 0;
   MOCK_CHECKLIST_INSTANCE_ITEMS.length = 0;
+  // S26 runtime arrays start empty per test — there are no fixture rows to
+  // restore, only mutations to discard.
+  MOCK_SCHEDULE_CLOCK_RECORDS.length = 0;
+  MOCK_SCHEDULE_CLOCK_CORRECTIONS.length = 0;
+  MOCK_SCHEDULE_SHIFT_CHANGE_REQUESTS.length = 0;
+  MOCK_SCHEDULE_SHIFT_ATTENDANCE.length = 0;
+  MOCK_SCHEDULE_SHIFT_NOTIFICATIONS_SENT.length = 0;
 }

@@ -112,35 +112,25 @@ export async function createWeek(
   }
 
   const supabase = createClient();
-  const { data: created, error } = await supabase
-    .from("schedule_weeks")
-    .insert({ week_start_date: weekStartDate, status: "draft" })
-    .select("*")
-    .single();
-  if (error || !created) {
+  const { data, error } = await supabase.rpc("schedule_create_week", {
+    p_week_start_date: weekStartDate,
+    p_drafts: draftShifts.map(serialiseDraftShift),
+  });
+  if (error || !data) {
     return { success: false, error: error?.message ?? "Insert failed" };
   }
-  const weekRow = created as ScheduleWeek;
-  if (draftShifts.length > 0) {
-    const insertRows = draftShifts.map((d) => ({
-      week_id: weekRow.id,
-      template_id: d.template_id,
-      shift_date: d.shift_date,
-      start_time: d.start_time,
-      end_time: d.end_time,
-      role: d.role,
-      user_id: d.user_id,
-    }));
-    const { error: shiftErr } = await supabase
-      .from("schedule_shifts")
-      .insert(insertRows);
-    if (shiftErr) {
-      // Roll back the week so the caller can retry cleanly.
-      await supabase.from("schedule_weeks").delete().eq("id", weekRow.id);
-      return { success: false, error: shiftErr.message };
-    }
-  }
-  return { success: true, week: weekRow };
+  return { success: true, week: data as ScheduleWeek };
+}
+
+function serialiseDraftShift(d: DraftShift): Record<string, string | null> {
+  return {
+    template_id: d.template_id,
+    shift_date: d.shift_date,
+    start_time: d.start_time,
+    end_time: d.end_time,
+    role: d.role,
+    user_id: d.user_id ?? null,
+  };
 }
 
 function pushDraftsToMock(weekId: string, drafts: DraftShift[]): void {
@@ -164,8 +154,10 @@ function pushDraftsToMock(weekId: string, drafts: DraftShift[]): void {
 /**
  * Creates a new draft week starting from the previous week's shifts.
  * Manual assignments are copied where the user still has the right
- * qualification AND no conflicting effective_until on their FT
- * assignment.
+ * qualification. FT-derived rows come from materialiseFTAssignments and
+ * carryovers come from previous-week shifts shifted +7 days. Real mode runs
+ * inside one transaction via schedule_copy_from_previous_week so a partial
+ * failure can't leave a dangling week.
  */
 export async function copyFromPreviousWeek(
   newWeekStartDate: string,
@@ -180,63 +172,108 @@ export async function copyFromPreviousWeek(
     return { success: false, error: "Previous week not found" };
   }
 
-  // Start with the materialised FT shifts so a user removed from the team
-  // doesn't carry over.
-  const created = await createWeek(newWeekStartDate);
-  if (!created.success || !created.week) return created;
+  const [templates, dayCoverage, ftAssignments, previousShifts] =
+    await Promise.all([
+      listShiftTemplates(),
+      listDayCoverage(),
+      listFtAssignments(),
+      listShiftsForWeek(previous.id),
+    ]);
 
-  // Pull manual assignments from the previous week (those whose user_id is
-  // not present in the FT-derived materialisation) and graft them on,
-  // shifting dates forward by 7 days.
-  const previousShifts = await listShiftsForWeek(previous.id);
+  const ftDrafts = materializeFTAssignments({
+    weekStartDate: newWeekStartDate,
+    ftAssignments,
+    templates,
+    dayCoverage,
+  });
+
+  // Build the carryover list: same shape as DraftShift, dates shifted +7.
+  // Skip rows that overlap an FT-derived draft on (user_id, template_id,
+  // shift_date) — those are already in `ftDrafts` and would otherwise
+  // double-count.
+  const ftKey = new Set(
+    ftDrafts.map(
+      (d) => `${d.user_id ?? ""}::${d.template_id}::${d.shift_date}`
+    )
+  );
   const ms = 24 * 60 * 60 * 1000 * 7;
-
+  const carryovers: DraftShift[] = [];
   for (const shift of previousShifts) {
     if (!shift.user_id) continue;
     const userQuals = qualificationsByUser.get(shift.user_id) ?? [];
     if (!userQuals.includes(shift.role)) continue;
-
-    // Compute the corresponding date in the new week.
     const [y, m, d] = shift.shift_date.split("-").map(Number);
     const next = new Date(Date.UTC(y, m - 1, d) + ms);
     const newDate = `${next.getUTCFullYear()}-${String(
       next.getUTCMonth() + 1
     ).padStart(2, "0")}-${String(next.getUTCDate()).padStart(2, "0")}`;
-
-    // Append a fresh shift row for this carried-over assignment. The
-    // FT-derived rows are already in place; manual extras live alongside.
-    if (!isSupabaseConfigured()) {
-      MOCK_SCHEDULE_SHIFTS.push({
-        id: id("schedule-shift"),
-        week_id: created.week.id,
-        template_id: shift.template_id,
-        shift_date: newDate,
-        start_time: shift.start_time,
-        end_time: shift.end_time,
-        user_id: shift.user_id,
-        role: shift.role,
-        notes: null,
-        created_at: nowIso(),
-        updated_at: nowIso(),
-      });
-    } else {
-      const supabase = createClient();
-      const { error } = await supabase.from("schedule_shifts").insert({
-        week_id: created.week.id,
-        template_id: shift.template_id,
-        shift_date: newDate,
-        start_time: shift.start_time,
-        end_time: shift.end_time,
-        user_id: shift.user_id,
-        role: shift.role,
-      });
-      if (error) {
-        return { success: false, error: error.message };
-      }
+    if (ftKey.has(`${shift.user_id}::${shift.template_id}::${newDate}`)) {
+      continue;
     }
+    carryovers.push({
+      template_id: shift.template_id,
+      shift_date: newDate,
+      start_time: shift.start_time,
+      end_time: shift.end_time,
+      user_id: shift.user_id,
+      role: shift.role,
+    });
   }
 
-  return { success: true, week: created.week };
+  if (!isSupabaseConfigured()) {
+    return atomicMockCreate(newWeekStartDate, [...ftDrafts, ...carryovers]);
+  }
+
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc(
+    "schedule_copy_from_previous_week",
+    {
+      p_new_ws: newWeekStartDate,
+      p_prev_ws: previousWeekStartDate,
+      p_drafts: ftDrafts.map(serialiseDraftShift),
+      p_carryovers: carryovers.map(serialiseDraftShift),
+    }
+  );
+  if (error || !data) {
+    return { success: false, error: error?.message ?? "Copy failed" };
+  }
+  return { success: true, week: data as ScheduleWeek };
+}
+
+/**
+ * Atomic mock-mode equivalent of schedule_create_week / copy_from_previous.
+ * Either every row lands or none of them do — emulates the SQL transaction.
+ */
+function atomicMockCreate(
+  weekStartDate: string,
+  drafts: DraftShift[]
+): { success: boolean; week?: ScheduleWeek; error?: string } {
+  const newWeek: ScheduleWeek = {
+    id: id("schedule-week"),
+    week_start_date: weekStartDate,
+    status: "draft",
+    published_at: null,
+    published_by: null,
+    publish_override_note: null,
+    created_at: nowIso(),
+    updated_at: nowIso(),
+  };
+  const newShifts = drafts.map((d) => ({
+    id: id("schedule-shift"),
+    week_id: newWeek.id,
+    template_id: d.template_id,
+    shift_date: d.shift_date,
+    start_time: d.start_time,
+    end_time: d.end_time,
+    user_id: d.user_id,
+    role: d.role,
+    notes: null,
+    created_at: nowIso(),
+    updated_at: nowIso(),
+  }));
+  MOCK_SCHEDULE_WEEKS.push(newWeek);
+  for (const s of newShifts) MOCK_SCHEDULE_SHIFTS.push(s);
+  return { success: true, week: newWeek };
 }
 
 // ---------- Shifts ----------
@@ -292,6 +329,68 @@ export async function listShiftsForDate(
   userId: string
 ): Promise<ScheduleShift[]> {
   return listShiftsForUserInDateRange(userId, shiftDate, shiftDate);
+}
+
+/**
+ * Returns assigned shifts in published weeks whose scheduled start falls in
+ * [windowStartIso, windowEndIso). Used by the 1h-pre-shift push cron.
+ *
+ * Mock mode evaluates the SGT-anchored start of each shift (date + start
+ * time) and filters in-memory. Real mode delegates the date filter to
+ * Postgres and applies the time-of-day check after the fetch — comparing
+ * (date, time) tuples to UTC instants is a transcoding job that's clearer
+ * in app code than in SQL.
+ */
+export async function listShiftsStartingInWindow(
+  windowStartIso: string,
+  windowEndIso: string
+): Promise<ScheduleShift[]> {
+  const startMs = Date.parse(windowStartIso);
+  const endMs = Date.parse(windowEndIso);
+  const inWindow = (s: ScheduleShift): boolean => {
+    const [y, m, d] = s.shift_date.split("-").map(Number);
+    const [hh = "0", mm = "0", ss = "0"] = s.start_time.split(":");
+    const startUtcMs =
+      Date.UTC(
+        y,
+        m - 1,
+        d,
+        Number.parseInt(hh, 10),
+        Number.parseInt(mm, 10),
+        Number.parseInt(ss, 10)
+      ) - 8 * 60 * 60 * 1000;
+    return startUtcMs >= startMs && startUtcMs < endMs;
+  };
+
+  if (!isSupabaseConfigured()) {
+    const publishedIds = new Set(
+      MOCK_SCHEDULE_WEEKS.filter((w) => w.status === "published").map(
+        (w) => w.id
+      )
+    );
+    return MOCK_SCHEDULE_SHIFTS.filter(
+      (s) =>
+        s.user_id !== null && publishedIds.has(s.week_id) && inWindow(s)
+    );
+  }
+  const supabase = createClient();
+  // Pull a slightly wider date range than the strict window so the
+  // time-of-day filter has the rows it needs.
+  const dayStart = new Date(startMs - 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  const dayEnd = new Date(endMs + 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  const { data } = await supabase
+    .from("schedule_shifts")
+    .select("*, schedule_weeks!inner(status)")
+    .eq("schedule_weeks.status", "published")
+    .gte("shift_date", dayStart)
+    .lte("shift_date", dayEnd)
+    .not("user_id", "is", null);
+  const rows = (data as ScheduleShift[] | null) ?? [];
+  return rows.filter(inWindow);
 }
 
 export async function getShift(
