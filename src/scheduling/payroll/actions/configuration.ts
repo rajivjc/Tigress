@@ -28,19 +28,28 @@ export async function setPayrollSettingsAction(input: {
   defaultExportFormat?: PayrollExportFormat;
   statutoryDeductionPct?: number;
   currency?: string;
+  timezone?: string;
 }): Promise<{ success: boolean; error?: string }> {
   const current = await getCurrentStaff();
   if (!current) return { success: false, error: "Not signed in" };
   if (!isOwner(current.role)) {
     return { success: false, error: "Owner role required" };
   }
-  const result = await updateSettings({
-    pay_frequency: input.payFrequency,
-    payment_offset_days: input.paymentOffsetDays,
-    default_export_format: input.defaultExportFormat,
-    statutory_deduction_pct: input.statutoryDeductionPct,
-    currency: input.currency,
-  });
+  // Build the patch from defined fields only, mirroring the
+  // updateBrandingAction pattern — Object.assign in the data layer
+  // would clobber existing values when an unspecified field is undefined.
+  const patch: Parameters<typeof updateSettings>[0] = {};
+  if (input.payFrequency !== undefined) patch.pay_frequency = input.payFrequency;
+  if (input.paymentOffsetDays !== undefined)
+    patch.payment_offset_days = input.paymentOffsetDays;
+  if (input.defaultExportFormat !== undefined)
+    patch.default_export_format = input.defaultExportFormat;
+  if (input.statutoryDeductionPct !== undefined)
+    patch.statutory_deduction_pct = input.statutoryDeductionPct;
+  if (input.currency !== undefined) patch.currency = input.currency;
+  if (input.timezone !== undefined) patch.timezone = input.timezone;
+
+  const result = await updateSettings(patch);
   if (!result) return { success: false, error: "Update failed" };
 
   await writePayrollAuditLog(

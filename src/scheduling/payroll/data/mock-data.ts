@@ -14,6 +14,7 @@ import type {
   PayrollRun,
   PayrollRunReconciliation,
   PayrollSettings,
+  PayrollVenueBranding,
 } from "../types";
 
 const fixed = "2025-01-01T00:00:00.000Z";
@@ -118,6 +119,21 @@ export const MOCK_PAYROLL_RUNS: PayrollRun[] = [];
 export const MOCK_PAYROLL_LINE_ITEMS: PayrollLineItem[] = [];
 export const MOCK_PAYROLL_RECONCILIATION: PayrollRunReconciliation[] = [];
 
+// Singleton venue branding (S27b). Owner overwrites via /owner/payroll/
+// settings/branding once the venue's actual details are filled in.
+export const MOCK_PAYROLL_VENUE_BRANDING: PayrollVenueBranding[] = [
+  {
+    id: "payroll-branding-1",
+    venue_name: "Tigress",
+    address: "",
+    contact_email: "",
+    contact_phone: "",
+    logo_url: "",
+    created_at: fixed,
+    updated_at: fixed,
+  },
+];
+
 /** Test hook — full reset of the mutable arrays. */
 export function __resetMockPayroll(): void {
   MOCK_PAYROLL_RUNS.length = 0;
@@ -147,6 +163,17 @@ export function __resetMockPayroll(): void {
     rest_day_multiplier: 2.0,
     public_holiday_multiplier: 2.0,
     rest_day_strategy: "sunday",
+    created_at: fixed,
+    updated_at: fixed,
+  };
+  MOCK_PAYROLL_VENUE_BRANDING.length = 1;
+  MOCK_PAYROLL_VENUE_BRANDING[0] = {
+    id: "payroll-branding-1",
+    venue_name: "Tigress",
+    address: "",
+    contact_email: "",
+    contact_phone: "",
+    logo_url: "",
     created_at: fixed,
     updated_at: fixed,
   };

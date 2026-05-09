@@ -15,7 +15,11 @@ import {
   addLineItemAction,
   deleteLineItemAction,
 } from "@/scheduling/payroll/actions/line-items";
-import { exportRunCsvAction } from "@/scheduling/payroll/actions/export";
+import {
+  exportRunCsvAction,
+  exportRunJsonAction,
+  exportRunPdfAction,
+} from "@/scheduling/payroll/actions/export";
 import type {
   PayrollLineItem,
   PayrollLineItemKind,
@@ -48,6 +52,23 @@ function fmt(n: number): string {
 
 function downloadCsv(filename: string, content: string) {
   const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
+  triggerDownload(blob, filename);
+}
+
+function downloadJson(filename: string, content: string) {
+  const blob = new Blob([content], { type: "application/json;charset=utf-8" });
+  triggerDownload(blob, filename);
+}
+
+function downloadBase64(filename: string, base64: string, contentType: string) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const blob = new Blob([bytes], { type: contentType });
+  triggerDownload(blob, filename);
+}
+
+function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -248,6 +269,42 @@ export function PayrollRunClient({ run, lineItems, staff, isOwner }: Props) {
               Export CSV
             </button>
           )}
+          {isLocked && (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() =>
+                run_(async () => {
+                  const r = await exportRunJsonAction(run.id);
+                  if (!r.success || !r.json || !r.filename) {
+                    throw new Error(r.error ?? "Export failed");
+                  }
+                  downloadJson(r.filename, r.json);
+                })
+              }
+              className="rounded bg-zinc-800 px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-700"
+            >
+              Export JSON
+            </button>
+          )}
+          {isLocked && (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() =>
+                run_(async () => {
+                  const r = await exportRunPdfAction(run.id);
+                  if (!r.success || !r.pdfBase64 || !r.filename || !r.contentType) {
+                    throw new Error(r.error ?? "Export failed");
+                  }
+                  downloadBase64(r.filename, r.pdfBase64, r.contentType);
+                })
+              }
+              className="rounded bg-rose-600 px-3 py-1.5 text-sm text-white hover:bg-rose-500"
+            >
+              Export all payslips (zip)
+            </button>
+          )}
         </div>
       </div>
 
@@ -351,6 +408,7 @@ export function PayrollRunClient({ run, lineItems, staff, isOwner }: Props) {
             staffName={staffMap.get(staffId) ?? staffId}
             items={items}
             isDraft={isDraft}
+            isLocked={isLocked}
             runId={run.id}
             onAfter={() => router.refresh()}
           />
@@ -370,6 +428,7 @@ interface StaffSectionProps {
   staffName: string;
   items: PayrollLineItem[];
   isDraft: boolean;
+  isLocked: boolean;
   runId: string;
   onAfter: () => void;
 }
@@ -379,6 +438,7 @@ function StaffSection({
   staffName,
   items,
   isDraft,
+  isLocked,
   runId,
   onAfter,
 }: StaffSectionProps) {
@@ -396,9 +456,34 @@ function StaffSection({
 
   return (
     <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
-      <div className="flex items-baseline justify-between">
+      <div className="flex items-baseline justify-between gap-2">
         <h3 className="font-medium text-zinc-100">{staffName}</h3>
-        <span className="text-sm text-zinc-300">{fmt(subtotal)}</span>
+        <div className="flex items-center gap-2">
+          {isLocked && (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() =>
+                start(async () => {
+                  setError(null);
+                  try {
+                    const r = await exportRunPdfAction(runId, staffId);
+                    if (!r.success || !r.pdfBase64 || !r.filename || !r.contentType) {
+                      throw new Error(r.error ?? "Export failed");
+                    }
+                    downloadBase64(r.filename, r.pdfBase64, r.contentType);
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : "Failed");
+                  }
+                })
+              }
+              className="rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-200 hover:bg-zinc-700"
+            >
+              Preview payslip (PDF)
+            </button>
+          )}
+          <span className="text-sm text-zinc-300">{fmt(subtotal)}</span>
+        </div>
       </div>
 
       {engine.length > 0 && (

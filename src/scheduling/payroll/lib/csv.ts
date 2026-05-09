@@ -1,14 +1,16 @@
 // =============================================================================
-// Payroll — CSV export formatter (Session 27a)
+// Payroll — CSV export formatter (Session 27a, refactored S27b)
 // =============================================================================
-// Pure function that takes a run + its line items + staff list and returns
-// a CSV string. Flat one-row-per-staff-per-period format; all line-item
-// kinds are columns. Negatives carry their sign on individual rows; `net`
-// is the sum of all amounts.
+// Thin flattener over the payslip transformer (lib/payslip-transformer.ts).
+// All aggregation lives in the transformer so PDF / JSON / CSV share one
+// pass and identical totals. CSV column shape is intentionally unchanged
+// from S27a — accountant scripts depending on the v1 layout keep working.
 // =============================================================================
 
-import type { Staff } from "@/lib/types";
-import type { PayrollLineItem, PayrollRun } from "../types";
+import {
+  buildPayslipDocument,
+  type BuildPayslipDocumentInput,
+} from "./payslip-transformer";
 
 const COLUMNS = [
   "staff_id",
@@ -47,146 +49,19 @@ function fmt(n: number): string {
   return n.toFixed(2);
 }
 
-interface PerStaffTotals {
-  regular_hours: number;
-  regular_amount: number;
-  daily_ot_hours: number;
-  daily_ot_amount: number;
-  weekly_ot_hours: number;
-  weekly_ot_amount: number;
-  rest_day_hours: number;
-  rest_day_amount: number;
-  public_holiday_hours: number;
-  public_holiday_amount: number;
-  allowances_total: number;
-  tips_total: number;
-  bonuses_total: number;
-  deductions_total: number;
-  statutory_total: number;
-  other_total: number;
-  // Unrounded accumulators for gross/net (S27a-fix-2 Finding 6).
-  // Display columns above hold sums-of-line-item-amounts and are formatted
-  // independently. gross/net are aggregated separately so any FP drift
-  // introduced by summing already-rounded column totals can't pollute
-  // the bottom line — gross/net are rounded ONCE at fmt() time.
-  gross_unrounded: number;
-  net_unrounded: number;
-}
-
-function emptyTotals(): PerStaffTotals {
-  return {
-    regular_hours: 0,
-    regular_amount: 0,
-    daily_ot_hours: 0,
-    daily_ot_amount: 0,
-    weekly_ot_hours: 0,
-    weekly_ot_amount: 0,
-    rest_day_hours: 0,
-    rest_day_amount: 0,
-    public_holiday_hours: 0,
-    public_holiday_amount: 0,
-    allowances_total: 0,
-    tips_total: 0,
-    bonuses_total: 0,
-    deductions_total: 0,
-    statutory_total: 0,
-    other_total: 0,
-    gross_unrounded: 0,
-    net_unrounded: 0,
-  };
-}
-
-export interface CsvExportInput {
-  run: PayrollRun;
-  lineItems: PayrollLineItem[];
-  staff: Pick<Staff, "id" | "full_name">[];
-}
+export type CsvExportInput = BuildPayslipDocumentInput;
 
 export function formatRunAsCsv(input: CsvExportInput): string {
-  const { run, lineItems, staff } = input;
-
-  const totalsByStaff = new Map<string, PerStaffTotals>();
-  for (const item of lineItems) {
-    const t = totalsByStaff.get(item.staff_id) ?? emptyTotals();
-    const hours = item.hours ?? 0;
-    // Net always rolls up every item (positives add, negatives subtract).
-    // Gross excludes the negative kinds.
-    t.net_unrounded += item.amount;
-    switch (item.kind) {
-      case "hours":
-        t.regular_hours += hours;
-        t.regular_amount += item.amount;
-        t.gross_unrounded += item.amount;
-        break;
-      case "overtime":
-        // daily vs weekly OT are not distinguished in line-item data; we
-        // treat all "overtime" line items as weekly_ot for export display.
-        // (The engine emits separate line items per source kind, so this
-        // is a label split, not a fidelity loss.)
-        if (item.multipliers && (item.multipliers as Record<string, number>)["ot:daily_ot"]) {
-          t.daily_ot_hours += hours;
-          t.daily_ot_amount += item.amount;
-        } else {
-          t.weekly_ot_hours += hours;
-          t.weekly_ot_amount += item.amount;
-        }
-        t.gross_unrounded += item.amount;
-        break;
-      case "rest_day":
-        t.rest_day_hours += hours;
-        t.rest_day_amount += item.amount;
-        t.gross_unrounded += item.amount;
-        break;
-      case "public_holiday":
-        t.public_holiday_hours += hours;
-        t.public_holiday_amount += item.amount;
-        t.gross_unrounded += item.amount;
-        break;
-      case "allowance":
-        t.allowances_total += item.amount;
-        t.gross_unrounded += item.amount;
-        break;
-      case "tip":
-        t.tips_total += item.amount;
-        t.gross_unrounded += item.amount;
-        break;
-      case "bonus":
-        t.bonuses_total += item.amount;
-        t.gross_unrounded += item.amount;
-        break;
-      case "deduction":
-        t.deductions_total += item.amount;
-        break;
-      case "statutory":
-        t.statutory_total += item.amount;
-        break;
-      case "other":
-        t.other_total += item.amount;
-        t.gross_unrounded += item.amount;
-        break;
-    }
-    totalsByStaff.set(item.staff_id, t);
-  }
-
-  const staffById = new Map(staff.map((s) => [s.id, s]));
+  const doc = buildPayslipDocument(input);
   const lines = [COLUMNS.map(escapeCsv).join(",")];
 
-  // Stable ordering: staff id ascending.
-  const staffIds = Array.from(totalsByStaff.keys()).sort();
-  for (const sid of staffIds) {
-    const t = totalsByStaff.get(sid)!;
-    const name = staffById.get(sid)?.full_name ?? sid;
-    // Use the dedicated unrounded accumulators so gross/net are rounded
-    // exactly once. Previously this re-summed the column-display totals
-    // (each itself a sum) which is functionally equivalent in normal
-    // currency math but accumulates double FP error along the way.
-    const gross = t.gross_unrounded;
-    const net = t.net_unrounded;
+  for (const section of doc.staff) {
+    const t = section.totals;
     const row = [
-      sid,
-      name,
-      run.period_start,
-      run.period_end,
+      section.staff_id,
+      section.full_name,
+      doc.run.period_start,
+      doc.run.period_end,
       fmt(t.regular_hours),
       fmt(t.regular_amount),
       fmt(t.daily_ot_hours),
@@ -203,8 +78,8 @@ export function formatRunAsCsv(input: CsvExportInput): string {
       fmt(t.deductions_total),
       fmt(t.statutory_total),
       fmt(t.other_total),
-      fmt(gross),
-      fmt(net),
+      fmt(t.gross),
+      fmt(t.net),
     ];
     lines.push(row.map(escapeCsv).join(","));
   }

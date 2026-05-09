@@ -112,6 +112,17 @@ export interface PayrollHoliday {
   created_at: string;
 }
 
+export interface PayrollVenueBranding {
+  id: string;
+  venue_name: string;
+  address: string;
+  contact_email: string;
+  contact_phone: string;
+  logo_url: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface PayrollRun {
   id: string;
   period_start: string;
@@ -199,4 +210,5 @@ export type PayrollAuditEventType =
   | "payroll.run.exported"
   | "payroll.line_item.added"
   | "payroll.line_item.updated"
-  | "payroll.line_item.deleted";
+  | "payroll.line_item.deleted"
+  | "payroll.branding.updated";
