@@ -251,4 +251,91 @@ describe("validateWeekCoverage", () => {
     expect(r.gaps.length).toBe(1);
     expect(r.gaps[0].template_id).toBe("pm");
   });
+
+  // ----- S27a additions to bring file to 20+ tests -----
+
+  it("missing day_coverage row treats requirement as zero (no gap)", () => {
+    const monday = "2026-05-04";
+    const shifts = [
+      shift({ template_id: "am", shift_date: monday, role: "bartender", user_id: "u1" }),
+    ];
+    const r = validateWeekCoverage({ shifts, dayCoverage: [] });
+    expect(r.ok).toBe(true);
+    expect(r.gaps).toEqual([]);
+  });
+
+  it("multiple shifts on different dates each evaluated independently", () => {
+    const monday = "2026-05-04";
+    const tuesday = "2026-05-05";
+    const dc = [
+      coverage("am", 0, { bartender: 1 }),
+      coverage("am", 1, { bartender: 1 }),
+    ];
+    const shifts = [
+      shift({ template_id: "am", shift_date: monday, role: "bartender", user_id: "u1" }),
+      shift({ template_id: "am", shift_date: tuesday, role: "bartender", user_id: null }),
+    ];
+    const r = validateWeekCoverage({ shifts, dayCoverage: dc });
+    expect(r.gaps).toHaveLength(1);
+    expect(r.gaps[0].shift_date).toBe(tuesday);
+  });
+
+  it("two same-day same-template shifts of different roles can fully cover", () => {
+    const monday = "2026-05-04";
+    const dc = [coverage("am", 0, { bartender: 1, mod: 1 })];
+    const shifts = [
+      shift({ id: "a", template_id: "am", shift_date: monday, role: "bartender", user_id: "u1" }),
+      shift({ id: "b", template_id: "am", shift_date: monday, role: "mod", user_id: "u2" }),
+    ];
+    const r = validateWeekCoverage({ shifts, dayCoverage: dc });
+    expect(r.ok).toBe(true);
+  });
+
+  it("over-staffed AND missing role still produces a precise gap for the missing role", () => {
+    const monday = "2026-05-04";
+    const dc = [coverage("pm", 0, { bartender: 1, floor: 1 })];
+    const shifts = [
+      shift({ id: "a", template_id: "pm", shift_date: monday, role: "bartender", user_id: "u1" }),
+      shift({ id: "b", template_id: "pm", shift_date: monday, role: "bartender", user_id: "u2" }),
+    ];
+    const r = validateWeekCoverage({ shifts, dayCoverage: dc });
+    expect(r.ok).toBe(false);
+    const floorGap = r.gaps.find((g) => g.role === "floor");
+    expect(floorGap).toMatchObject({ required: 1, assigned: 0 });
+  });
+
+  it("zero-required role with assigned staff is fine and produces no gap", () => {
+    const monday = "2026-05-04";
+    const dc = [coverage("am", 0, { bartender: 0, floor: 1 })];
+    const shifts = [
+      shift({ id: "a", template_id: "am", shift_date: monday, role: "bartender", user_id: "u1" }),
+      shift({ id: "b", template_id: "am", shift_date: monday, role: "floor", user_id: "u2" }),
+    ];
+    const r = validateWeekCoverage({ shifts, dayCoverage: dc });
+    expect(r.ok).toBe(true);
+  });
+
+  it("multi-shift-per-day weeks edge — same template multiple shifts same day still aggregates assignments", () => {
+    // Two AM shifts assigned to two different bartenders on Monday.
+    // Coverage requirement is two bartenders. ok = true.
+    const monday = "2026-05-04";
+    const dc = [coverage("am", 0, { bartender: 2 })];
+    const shifts = [
+      shift({ id: "a", template_id: "am", shift_date: monday, role: "bartender", user_id: "u1" }),
+      shift({ id: "b", template_id: "am", shift_date: monday, role: "bartender", user_id: "u2" }),
+    ];
+    const r = validateWeekCoverage({ shifts, dayCoverage: dc });
+    expect(r.ok).toBe(true);
+  });
+
+  it("per_shift report unfilled_roles is empty when group is fully staffed", () => {
+    const monday = "2026-05-04";
+    const dc = [coverage("am", 0, { bartender: 1 })];
+    const shifts = [
+      shift({ id: "s1", template_id: "am", shift_date: monday, role: "bartender", user_id: "u1" }),
+    ];
+    const r = validateWeekCoverage({ shifts, dayCoverage: dc });
+    const report = r.per_shift.find((p) => p.shift_id === "s1");
+    expect(report?.unfilled_roles).toEqual([]);
+  });
 });

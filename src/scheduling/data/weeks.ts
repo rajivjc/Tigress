@@ -96,6 +96,11 @@ export async function createWeek(
   });
 
   if (!isSupabaseConfigured()) {
+    // Mock-mode atomicity: snapshot the shift array up-front so we can
+    // roll back the week + any partially-pushed shifts if the carry-over
+    // push throws. Mirrors the real-mode schedule_create_week RPC's
+    // transactional guarantee so tests with throw-injection see a clean
+    // post-failure state.
     const newWeek: ScheduleWeek = {
       id: id("schedule-week"),
       week_start_date: weekStartDate,
@@ -106,9 +111,21 @@ export async function createWeek(
       created_at: nowIso(),
       updated_at: nowIso(),
     };
+    const beforeShifts = MOCK_SCHEDULE_SHIFTS.slice();
     MOCK_SCHEDULE_WEEKS.push(newWeek);
-    pushDraftsToMock(newWeek.id, draftShifts);
-    return { success: true, week: newWeek };
+    try {
+      pushDraftsToMock(newWeek.id, draftShifts);
+      return { success: true, week: newWeek };
+    } catch (err) {
+      // Rollback: drop the week row and restore shift array to its prior state.
+      MOCK_SCHEDULE_WEEKS.pop();
+      MOCK_SCHEDULE_SHIFTS.length = 0;
+      MOCK_SCHEDULE_SHIFTS.push(...beforeShifts);
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : "Create week failed",
+      };
+    }
   }
 
   const supabase = createClient();
@@ -271,9 +288,25 @@ function atomicMockCreate(
     created_at: nowIso(),
     updated_at: nowIso(),
   }));
-  MOCK_SCHEDULE_WEEKS.push(newWeek);
-  for (const s of newShifts) MOCK_SCHEDULE_SHIFTS.push(s);
-  return { success: true, week: newWeek };
+  // Snapshot for throw-rollback so a partial failure during the carry-over
+  // push leaves the global state untouched. Mirrors the real-mode RPC's
+  // transactional guarantee.
+  const beforeWeeks = MOCK_SCHEDULE_WEEKS.slice();
+  const beforeShifts = MOCK_SCHEDULE_SHIFTS.slice();
+  try {
+    MOCK_SCHEDULE_WEEKS.push(newWeek);
+    for (const s of newShifts) MOCK_SCHEDULE_SHIFTS.push(s);
+    return { success: true, week: newWeek };
+  } catch (err) {
+    MOCK_SCHEDULE_WEEKS.length = 0;
+    MOCK_SCHEDULE_WEEKS.push(...beforeWeeks);
+    MOCK_SCHEDULE_SHIFTS.length = 0;
+    MOCK_SCHEDULE_SHIFTS.push(...beforeShifts);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Copy failed",
+    };
+  }
 }
 
 // ---------- Shifts ----------

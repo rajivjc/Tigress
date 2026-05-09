@@ -177,6 +177,17 @@ export interface ManagerEditInput {
   note: string;
 }
 
+/**
+ * Manager-driven edit. Branches on the current record status:
+ *   * `active`         — preserve the empty clocked_out_at (the staff is
+ *                        still on shift) and KEEP status `active`. Only the
+ *                        clocked_in_at can be retroactively adjusted.
+ *   * `pending_review` — set both timestamps, status remains `pending_review`.
+ *   * `locked`         — rejected. Unlock first.
+ *
+ * Fixes S26 Medium 3 where editing an active record set clocked_out_at to a
+ * stale value AND flipped status to pending_review prematurely.
+ */
 export async function managerEditClockRecord(
   input: ManagerEditInput
 ): Promise<{ success: boolean; record?: ClockRecord; error?: string }> {
@@ -186,30 +197,100 @@ export async function managerEditClockRecord(
     return { success: false, error: "Cannot edit a locked record. Unlock first." };
   }
 
+  const isActive = existing.status === "active";
+
   if (!isSupabaseConfigured()) {
     existing.clocked_in_at = input.clockedInAt;
-    existing.clocked_out_at = input.clockedOutAt;
+    if (!isActive) {
+      existing.clocked_out_at = input.clockedOutAt;
+    }
     existing.manager_edited = true;
     existing.manager_edit_note = input.note;
-    existing.status = "pending_review";
+    // Active stays active; pending_review stays pending_review.
     existing.updated_at = nowIso();
     return { success: true, record: existing };
   }
   const supabase = createClient();
+  const patch: Record<string, unknown> = {
+    clocked_in_at: input.clockedInAt,
+    manager_edited: true,
+    manager_edit_note: input.note,
+  };
+  if (!isActive) {
+    patch.clocked_out_at = input.clockedOutAt;
+  }
   const { data, error } = await supabase
     .from("schedule_clock_records")
-    .update({
-      clocked_in_at: input.clockedInAt,
-      clocked_out_at: input.clockedOutAt,
-      manager_edited: true,
-      manager_edit_note: input.note,
-      status: "pending_review",
-    })
+    .update(patch)
     .eq("id", input.recordId)
     .select("*")
     .single();
   if (error || !data) {
     return { success: false, error: error?.message ?? "Update failed" };
+  }
+  return { success: true, record: data as ClockRecord };
+}
+
+/**
+ * S26 Medium 5: manager-driven creation of a clock record for a past shift
+ * where the staff member forgot to clock in. Validates ownership and
+ * no-existing-record. Created in `pending_review` (clock-out provided)
+ * with manager_edited=true and the note.
+ */
+export interface CreateAsManagerInput {
+  shiftId: string;
+  userId: string;
+  clockedInAt: string;
+  clockedOutAt: string;
+  note: string;
+}
+
+export async function createClockRecordAsManager(
+  input: CreateAsManagerInput
+): Promise<{ success: boolean; record?: ClockRecord; error?: string }> {
+  if (!input.note.trim()) {
+    return { success: false, error: "Note is required" };
+  }
+  const existing = await getClockRecordForShift(input.shiftId, input.userId);
+  if (existing) {
+    return { success: false, error: "Clock record already exists for this shift" };
+  }
+
+  if (!isSupabaseConfigured()) {
+    const row: ClockRecord = {
+      id: id("schedule-clock"),
+      shift_id: input.shiftId,
+      user_id: input.userId,
+      clocked_in_at: input.clockedInAt,
+      clocked_out_at: input.clockedOutAt,
+      status: "pending_review",
+      locked_at: null,
+      locked_by: null,
+      unlock_note: null,
+      manager_edited: true,
+      manager_edit_note: input.note,
+      created_at: nowIso(),
+      updated_at: nowIso(),
+    };
+    MOCK_SCHEDULE_CLOCK_RECORDS.push(row);
+    return { success: true, record: row };
+  }
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("schedule_clock_records")
+    .insert({
+      shift_id: input.shiftId,
+      user_id: input.userId,
+      clocked_in_at: input.clockedInAt,
+      clocked_out_at: input.clockedOutAt,
+      status: "pending_review",
+      manager_edited: true,
+      manager_edit_note: input.note,
+    })
+    .select("*")
+    .single();
+  if (error || !data) {
+    return { success: false, error: error?.message ?? "Insert failed" };
   }
   return { success: true, record: data as ClockRecord };
 }
