@@ -110,6 +110,41 @@ describe("formatRunAsCsv", () => {
     expect(row[row.length - 1]).toBe("700.00");
   });
 
+  it("gross/net are round-of-sum, not sum-of-rounded across many small items (S27a-fix-2 Finding 6)", () => {
+    // Synthesise 100 line items at 0.01 each. Sum-of-rounded == round-of-sum
+    // for 2dp values, but the structural change to use a dedicated
+    // unrounded accumulator means gross is computed once and rounded once.
+    // Verify the published gross matches the round-of-sum value exactly.
+    const items: PayrollLineItem[] = [];
+    for (let i = 0; i < 100; i++) {
+      items.push(
+        li({
+          id: `i${i}`,
+          staff_id: "u1",
+          kind: "hours",
+          amount: 0.01,
+          hours: 0.001,
+          rate_applied: 10,
+        })
+      );
+    }
+    // Plus a deduction so the net path is exercised too.
+    items.push(
+      li({ id: "d1", staff_id: "u1", kind: "deduction", amount: -0.33, source: "manual" })
+    );
+    const csv = formatRunAsCsv({
+      run: RUN,
+      lineItems: items,
+      staff: [{ id: "u1", full_name: "X" }],
+    });
+    const header = csv.split("\n")[0].split(",");
+    const row = csv.split("\n")[1].split(",");
+    // gross = round(100 × 0.01) = 1.00 (positive items only)
+    expect(row[header.indexOf("gross")]).toBe("1.00");
+    // net = round(1.00 + -0.33) = 0.67
+    expect(row[header.indexOf("net")]).toBe("0.67");
+  });
+
   it("groups daily_ot vs weekly_ot when multipliers map flags", () => {
     const items: PayrollLineItem[] = [
       li({

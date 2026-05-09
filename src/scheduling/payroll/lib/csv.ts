@@ -64,6 +64,13 @@ interface PerStaffTotals {
   deductions_total: number;
   statutory_total: number;
   other_total: number;
+  // Unrounded accumulators for gross/net (S27a-fix-2 Finding 6).
+  // Display columns above hold sums-of-line-item-amounts and are formatted
+  // independently. gross/net are aggregated separately so any FP drift
+  // introduced by summing already-rounded column totals can't pollute
+  // the bottom line — gross/net are rounded ONCE at fmt() time.
+  gross_unrounded: number;
+  net_unrounded: number;
 }
 
 function emptyTotals(): PerStaffTotals {
@@ -84,6 +91,8 @@ function emptyTotals(): PerStaffTotals {
     deductions_total: 0,
     statutory_total: 0,
     other_total: 0,
+    gross_unrounded: 0,
+    net_unrounded: 0,
   };
 }
 
@@ -100,10 +109,14 @@ export function formatRunAsCsv(input: CsvExportInput): string {
   for (const item of lineItems) {
     const t = totalsByStaff.get(item.staff_id) ?? emptyTotals();
     const hours = item.hours ?? 0;
+    // Net always rolls up every item (positives add, negatives subtract).
+    // Gross excludes the negative kinds.
+    t.net_unrounded += item.amount;
     switch (item.kind) {
       case "hours":
         t.regular_hours += hours;
         t.regular_amount += item.amount;
+        t.gross_unrounded += item.amount;
         break;
       case "overtime":
         // daily vs weekly OT are not distinguished in line-item data; we
@@ -117,23 +130,29 @@ export function formatRunAsCsv(input: CsvExportInput): string {
           t.weekly_ot_hours += hours;
           t.weekly_ot_amount += item.amount;
         }
+        t.gross_unrounded += item.amount;
         break;
       case "rest_day":
         t.rest_day_hours += hours;
         t.rest_day_amount += item.amount;
+        t.gross_unrounded += item.amount;
         break;
       case "public_holiday":
         t.public_holiday_hours += hours;
         t.public_holiday_amount += item.amount;
+        t.gross_unrounded += item.amount;
         break;
       case "allowance":
         t.allowances_total += item.amount;
+        t.gross_unrounded += item.amount;
         break;
       case "tip":
         t.tips_total += item.amount;
+        t.gross_unrounded += item.amount;
         break;
       case "bonus":
         t.bonuses_total += item.amount;
+        t.gross_unrounded += item.amount;
         break;
       case "deduction":
         t.deductions_total += item.amount;
@@ -143,6 +162,7 @@ export function formatRunAsCsv(input: CsvExportInput): string {
         break;
       case "other":
         t.other_total += item.amount;
+        t.gross_unrounded += item.amount;
         break;
     }
     totalsByStaff.set(item.staff_id, t);
@@ -156,17 +176,12 @@ export function formatRunAsCsv(input: CsvExportInput): string {
   for (const sid of staffIds) {
     const t = totalsByStaff.get(sid)!;
     const name = staffById.get(sid)?.full_name ?? sid;
-    const gross =
-      t.regular_amount +
-      t.daily_ot_amount +
-      t.weekly_ot_amount +
-      t.rest_day_amount +
-      t.public_holiday_amount +
-      t.allowances_total +
-      t.tips_total +
-      t.bonuses_total +
-      t.other_total;
-    const net = gross + t.deductions_total + t.statutory_total;
+    // Use the dedicated unrounded accumulators so gross/net are rounded
+    // exactly once. Previously this re-summed the column-display totals
+    // (each itself a sum) which is functionally equivalent in normal
+    // currency math but accumulates double FP error along the way.
+    const gross = t.gross_unrounded;
+    const net = t.net_unrounded;
     const row = [
       sid,
       name,

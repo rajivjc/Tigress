@@ -4,7 +4,10 @@ import { revalidatePath } from "next/cache";
 import { getCurrentStaff, listAllStaff } from "@/lib/data/staff";
 import { sendPushToStaffMembers } from "@/lib/push/send";
 import { writePayrollAuditLog } from "../audit";
-import { listClockRecordsForUser } from "../../data/clock-records";
+import {
+  listClockRecordsForUser,
+  listClockRecordsInPeriod,
+} from "../../data/clock-records";
 import {
   createRun,
   deleteRun as deleteRunRow,
@@ -216,25 +219,14 @@ export async function lockRunAction(
   // Build snapshot inputs.
   const periodStartIso = `${run.period_start}T00:00:00Z`;
   const periodEndExclusiveIso = `${addDays(run.period_end, 1)}T00:00:00Z`;
-  const [allStaff, allRates, otRules, holidays] = await Promise.all([
-    listAllStaff(),
+  const [allRates, otRules, holidays, clockRecords] = await Promise.all([
     listAllRates(),
     getOvertimeRules(),
     listHolidaysInRange(run.period_start, run.period_end),
+    listClockRecordsInPeriod(periodStartIso, periodEndExclusiveIso),
   ]);
   if (!otRules) {
     return { success: false, error: "Overtime rules not configured" };
-  }
-  const clockRecords = [] as Awaited<
-    ReturnType<typeof listClockRecordsForUser>
-  >;
-  for (const s of allStaff) {
-    const recs = await listClockRecordsForUser(s.id, 1000);
-    for (const r of recs) {
-      if (r.clocked_in_at < periodStartIso) continue;
-      if (r.clocked_in_at >= periodEndExclusiveIso) continue;
-      clockRecords.push(r);
-    }
   }
 
   const result = await lockRunWithSnapshot(
