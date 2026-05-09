@@ -41,6 +41,7 @@ import { __setMockCookie } from "../../stubs/next-headers";
 import { resetMockData } from "../../helpers/reset-mock-data";
 import {
   MOCK_SCHEDULE_SHIFTS,
+  MOCK_SCHEDULE_SHIFT_CHANGE_REQUESTS,
   MOCK_SCHEDULE_WEEKS,
 } from "@/scheduling/data/mock-data";
 
@@ -107,6 +108,80 @@ describe("S26 fix-ups", () => {
       expect(ok.success).toBe(true);
       shift = await getShift(shiftId);
       expect(shift?.user_id).toBe("mock-staff-row-1");
+    });
+
+    it("rolls back BOTH writes when the second mutation throws (S27a-fix-2 Finding 4)", async () => {
+      // Set up the same accepted-swap state as the happy-path test.
+      const farFuture = addDaysSGT(todaySGT(), 14);
+      const ws = weekStartFor(farFuture);
+      const dow = (new Date(`${farFuture}T00:00:00Z`).getUTCDay() + 6) % 7;
+      await replaceAvailability("mock-staff-row-4", ws, [
+        { day_of_week: dow, start_time: "10:00:00", end_time: "23:59:00" },
+      ]);
+      const shiftId = await buildPublishedShift({
+        userId: "mock-staff-row-1",
+        date: farFuture,
+      });
+      signInAs("mock-staff-1");
+      await requestDirectSwapAction({
+        shiftId,
+        targetUserId: "mock-staff-row-4",
+      });
+      const reqId = (await listMyOutgoingRequests("mock-staff-row-1"))[0].id;
+      signInAs("mock-pt-1");
+      await acceptSwapRequestAction(reqId);
+      const acceptedShift = await getShift(shiftId);
+      expect(acceptedShift?.user_id).toBe("mock-staff-row-4");
+      const reqsBefore = await listMyOutgoingRequests("mock-staff-row-1");
+      expect(reqsBefore[0].status).toBe("accepted");
+
+      // Inject a throw on the FIRST status write inside the try-block of
+      // mock-mode reverseSwap. The proxy is one-shot: subsequent writes
+      // (the catch-block's rollback assigning prevReqStatus back) succeed.
+      const findSpy = vi.spyOn(
+        MOCK_SCHEDULE_SHIFT_CHANGE_REQUESTS,
+        "find"
+      );
+      let thrown = false;
+      findSpy.mockImplementation(function (
+        this: unknown,
+        ...args: unknown[]
+      ) {
+        const result = Array.prototype.find.apply(
+          MOCK_SCHEDULE_SHIFT_CHANGE_REQUESTS,
+          args as Parameters<typeof Array.prototype.find>
+        );
+        if (!result) return result;
+        return new Proxy(result, {
+          set(target, key, value) {
+            if (key === "status" && !thrown) {
+              thrown = true;
+              throw new Error("simulated DB failure");
+            }
+            return Reflect.set(target, key, value);
+          },
+        });
+      });
+
+      signInAs("mock-manager-1");
+      try {
+        const r = await reverseSwapAction({
+          requestId: reqId,
+          note: "should fail mid-flight",
+        });
+        expect(r.success).toBe(false);
+      } finally {
+        findSpy.mockRestore();
+      }
+
+      // Both rows should be back to their pre-call values: shift still
+      // assigned to the swap acceptor, request still 'accepted' with no
+      // reversal_note.
+      const finalShift = await getShift(shiftId);
+      expect(finalShift?.user_id).toBe("mock-staff-row-4");
+      const finalReq = (await listMyOutgoingRequests("mock-staff-row-1"))[0];
+      expect(finalReq.status).toBe("accepted");
+      expect(finalReq.reversal_note).toBeNull();
     });
   });
 

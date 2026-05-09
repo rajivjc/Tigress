@@ -89,6 +89,37 @@ export async function listClockRecordsForShifts(
   return (data as ClockRecord[] | null) ?? [];
 }
 
+/**
+ * Returns every locked clock record whose `clocked_in_at` falls within
+ * `[periodStartIso, periodEndExclusiveIso)`. The payroll engine and the
+ * lock-snapshot path both consume this — replaces the per-staff loop both
+ * sites used to run.
+ */
+export async function listClockRecordsInPeriod(
+  periodStartIso: string,
+  periodEndExclusiveIso: string
+): Promise<ClockRecord[]> {
+  if (!isSupabaseConfigured()) {
+    return MOCK_SCHEDULE_CLOCK_RECORDS.filter(
+      (r) =>
+        r.status === "locked" &&
+        r.clocked_in_at >= periodStartIso &&
+        r.clocked_in_at < periodEndExclusiveIso
+    )
+      .slice()
+      .sort((a, b) => a.clocked_in_at.localeCompare(b.clocked_in_at));
+  }
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("schedule_clock_records")
+    .select("*")
+    .eq("status", "locked")
+    .gte("clocked_in_at", periodStartIso)
+    .lt("clocked_in_at", periodEndExclusiveIso)
+    .order("clocked_in_at", { ascending: true });
+  return (data as ClockRecord[] | null) ?? [];
+}
+
 export interface ClockInInput {
   shiftId: string;
   userId: string;

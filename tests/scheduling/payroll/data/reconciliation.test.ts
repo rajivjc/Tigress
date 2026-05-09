@@ -1,5 +1,8 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { __resetMockPayroll } from "@/scheduling/payroll/data/mock-data";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  MOCK_PAYROLL_RECONCILIATION,
+  __resetMockPayroll,
+} from "@/scheduling/payroll/data/mock-data";
 import {
   getReconciliation,
   lockRunWithSnapshot,
@@ -175,6 +178,64 @@ describe("payroll reconciliation (mock mode)", () => {
     expect(fresh?.unlocked_by).toBe("owner-different");
     expect(fresh?.unlocked_at).not.toBeNull();
     expect(fresh?.unlock_note).toBe("fixing rate row");
+  });
+
+  // -------------------------------------------------------------------
+  // S27a-fix-2 Finding 11: rollback restores the PRIOR cycle's
+  // locked_by/locked_at, not nulls.
+  // -------------------------------------------------------------------
+
+  it("failed re-lock rollback restores the prior cycle's locked_by/locked_at, not nulls", async () => {
+    const run = await createRun({
+      periodStart: "2026-05-01",
+      periodEnd: "2026-05-31",
+      paymentDate: "2026-06-07",
+    });
+    await setRunStatus(run.run!.id, "review");
+    // 1st lock — establishes prior locked_by/locked_at.
+    await lockRunWithSnapshot(
+      {
+        runId: run.run!.id,
+        clockRecords: [],
+        ratesSnapshot: [],
+        overtimeRulesSnapshot: OT_RULES,
+        holidaysSnapshot: HOLIDAYS,
+      },
+      "owner-original"
+    );
+    await unlockRun(run.run!.id, "owner-original", "needed correction");
+    const beforeRetry = await getRun(run.run!.id);
+    expect(beforeRetry?.locked_by).toBe("owner-original");
+    expect(beforeRetry?.locked_at).not.toBeNull();
+
+    // Inject a throw on the reconciliation push so the re-lock fails.
+    const pushSpy = vi
+      .spyOn(MOCK_PAYROLL_RECONCILIATION, "push")
+      .mockImplementationOnce(() => {
+        throw new Error("simulated DB failure");
+      });
+    try {
+      const r = await lockRunWithSnapshot(
+        {
+          runId: run.run!.id,
+          clockRecords: [],
+          ratesSnapshot: [],
+          overtimeRulesSnapshot: OT_RULES,
+          holidaysSnapshot: HOLIDAYS,
+        },
+        "owner-second"
+      );
+      expect(r.success).toBe(false);
+    } finally {
+      pushSpy.mockRestore();
+    }
+
+    // The prior cycle's metadata should be intact, NOT wiped to nulls.
+    const after = await getRun(run.run!.id);
+    expect(after?.status).toBe("review");
+    expect(after?.locked_by).toBe("owner-original");
+    expect(after?.locked_at).toBe(beforeRetry!.locked_at);
+    expect(after?.unlock_note).toBe("needed correction");
   });
 
   it("re-lock cycle (lock → unlock → re-lock) leaves locked_by set to the second locker and unlocked_by from the original unlock", async () => {

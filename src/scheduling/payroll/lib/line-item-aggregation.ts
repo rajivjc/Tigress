@@ -180,3 +180,144 @@ export function buildLineItems(
 
   return items;
 }
+
+// =============================================================================
+// Per-record line item builder (S27a-fix-2 Finding 1)
+// =============================================================================
+// Replaces the legacy `buildLineItems` aggregation that flattened all of a
+// staff's hours under a single resolved-rate. The engine now resolves the
+// rate once per clock record (using the underlying shift's role +
+// start/end time) and feeds the per-record resolutions in here.
+//
+// Aggregation key: `(staff, classification kind, rateFingerprint)`. Two
+// records with the same effective rate AND multiplier set roll up into one
+// line item; records with different rates split into separate line items
+// so the CSV / payslip surfaces the breakdown.
+// =============================================================================
+
+export interface BuildLineItemsPerRecordInput {
+  runId: string;
+  /** Classified hours, one or more entries per record from the OT classifier. */
+  classifiedHours: ClassifiedHours[];
+  /** Resolved rate keyed by clock-record id. Records missing a resolution
+   *  fall back to `baseRates` keyed by staffId (effectively zero rate when
+   *  no rate row exists for the staff on the period). */
+  perRecordResolved: Map<string, ResolvedRate>;
+  settings: PayrollSettings;
+  /** Per-staff base rate fallback for records with no resolved entry. */
+  baseRates: Map<string, number>;
+}
+
+/** Stable, order-insensitive fingerprint of the multiplier set so two
+ *  records that fired identical multipliers collapse into one line item. */
+function rateFingerprint(
+  rate: number,
+  multipliers: Record<string, number>
+): string {
+  const keys = Object.keys(multipliers).sort();
+  const parts = keys.map((k) => `${k}=${multipliers[k]}`).join("|");
+  return `${rate.toFixed(4)}::${parts}`;
+}
+
+export function buildLineItemsPerRecord(
+  input: BuildLineItemsPerRecordInput
+): EngineLineItemDraft[] {
+  const { runId, classifiedHours, perRecordResolved, settings, baseRates } = input;
+
+  type Bucket = {
+    staffId: string;
+    kind: ClassificationKind;
+    hours: number;
+    amount: number;
+    multipliers: Record<string, number> | null;
+    rateApplied: number | null;
+    sampleClockRecordId: string | null;
+  };
+
+  const buckets = new Map<string, Bucket>();
+
+  for (const ch of classifiedHours) {
+    const resolved = perRecordResolved.get(ch.recordId);
+    const fallback = baseRates.get(ch.staffId) ?? 0;
+    const baseEffective = resolved ? resolved.effectiveRate : fallback;
+    const effective = baseEffective * ch.multiplier;
+    const amount = effective * ch.hours;
+
+    const baseMultipliers: Record<string, number> = resolved
+      ? { ...resolved.multipliersApplied }
+      : {};
+    if (ch.multiplier !== 1.0) {
+      baseMultipliers[`ot:${ch.kind}`] = ch.multiplier;
+    }
+    const fp = rateFingerprint(effective, baseMultipliers);
+    const key = `${ch.staffId}::${ch.kind}::${fp}`;
+
+    const existing = buckets.get(key);
+    if (existing) {
+      existing.hours += ch.hours;
+      existing.amount += amount;
+    } else {
+      buckets.set(key, {
+        staffId: ch.staffId,
+        kind: ch.kind,
+        hours: ch.hours,
+        amount,
+        multipliers:
+          Object.keys(baseMultipliers).length > 0 ? baseMultipliers : null,
+        rateApplied: round2(effective),
+        sampleClockRecordId: ch.recordId,
+      });
+    }
+  }
+
+  const items: EngineLineItemDraft[] = [];
+  // Stable order — staff id, kind, then fingerprint — keeps recompute output
+  // deterministic for the engine idempotency tests.
+  const sortedKeys = Array.from(buckets.keys()).sort();
+  for (const key of sortedKeys) {
+    const b = buckets.get(key)!;
+    items.push({
+      run_id: runId,
+      staff_id: b.staffId,
+      kind: KIND_TO_LINE_ITEM_KIND[b.kind],
+      label: KIND_LABEL[b.kind],
+      amount: round2(b.amount),
+      hours: round2(b.hours),
+      rate_applied: b.rateApplied,
+      multipliers: b.multipliers,
+      source: "engine",
+      clock_record_id: b.sampleClockRecordId,
+      notes: null,
+    });
+  }
+
+  // Statutory deduction — sums across every line item (each staff's gross
+  // from this run). Mirrors `buildLineItems` exactly so behaviour is
+  // unchanged when the engine swaps over.
+  const pct = settings.statutory_deduction_pct;
+  if (pct > 0) {
+    const gross = new Map<string, number>();
+    for (const it of items) {
+      gross.set(it.staff_id, (gross.get(it.staff_id) ?? 0) + it.amount);
+    }
+    for (const [staffId, g] of gross) {
+      const ded = round2(-(g * pct) / 100);
+      if (ded === 0) continue;
+      items.push({
+        run_id: runId,
+        staff_id: staffId,
+        kind: "statutory",
+        label: `Statutory deduction (${pct}%)`,
+        amount: ded,
+        hours: null,
+        rate_applied: null,
+        multipliers: null,
+        source: "engine",
+        clock_record_id: null,
+        notes: null,
+      });
+    }
+  }
+
+  return items;
+}

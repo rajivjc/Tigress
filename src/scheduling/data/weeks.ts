@@ -441,6 +441,28 @@ export async function getShift(
   return (data as ScheduleShift | null) ?? null;
 }
 
+/**
+ * Batched fetch — given a list of shift ids, returns the matching rows.
+ * Empty input short-circuits without a query. Used by the payroll engine
+ * to resolve every clock record's parent shift in one round trip rather
+ * than one round trip per record.
+ */
+export async function getShiftsByIds(
+  shiftIds: string[]
+): Promise<ScheduleShift[]> {
+  if (shiftIds.length === 0) return [];
+  if (!isSupabaseConfigured()) {
+    const set = new Set(shiftIds);
+    return MOCK_SCHEDULE_SHIFTS.filter((s) => set.has(s.id));
+  }
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("schedule_shifts")
+    .select("*")
+    .in("id", shiftIds);
+  return (data as ScheduleShift[] | null) ?? [];
+}
+
 export interface AddShiftInput {
   weekId: string;
   templateId: string;

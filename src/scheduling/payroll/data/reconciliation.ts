@@ -51,6 +51,18 @@ export async function lockRunWithSnapshot(
     if (existing) {
       return { success: false, error: "Reconciliation already exists" };
     }
+    // Snapshot pre-call state so a re-lock cycle (where locked_by /
+    // locked_at carry the PRIOR lock's values until the new lock writes)
+    // restores the prior values rather than wiping to nulls. Without this,
+    // a failed re-lock would erase the original locker's identity even
+    // though the run is still validly "previously-locked, now in review".
+    const snapshot = {
+      status: run.status,
+      locked_at: run.locked_at,
+      locked_by: run.locked_by,
+      unlock_note: run.unlock_note,
+      updated_at: run.updated_at,
+    };
     try {
       MOCK_PAYROLL_RECONCILIATION.push({
         run_id: input.runId,
@@ -70,14 +82,18 @@ export async function lockRunWithSnapshot(
       run.updated_at = nowIso();
       return { success: true };
     } catch (err) {
-      // Rollback.
+      // Rollback to the snapshotted pre-call state, NOT to nulls. Mirrors
+      // a SQL transaction's ROLLBACK semantics so a failed re-lock leaves
+      // the prior lock cycle's locked_by/locked_at intact.
       const idx = MOCK_PAYROLL_RECONCILIATION.findIndex(
         (r) => r.run_id === input.runId
       );
       if (idx >= 0) MOCK_PAYROLL_RECONCILIATION.splice(idx, 1);
-      run.status = "review";
-      run.locked_at = null;
-      run.locked_by = null;
+      run.status = snapshot.status;
+      run.locked_at = snapshot.locked_at;
+      run.locked_by = snapshot.locked_by;
+      run.unlock_note = snapshot.unlock_note;
+      run.updated_at = snapshot.updated_at;
       return {
         success: false,
         error: err instanceof Error ? err.message : "Lock failed",

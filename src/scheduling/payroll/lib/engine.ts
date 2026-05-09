@@ -4,27 +4,37 @@
 // Composes the three pure libs (rate-resolution + overtime-classification +
 // line-item-aggregation) into a single function that produces engine line
 // items for a run from the data-layer inputs.
+//
+// S27a-fix-2 Finding 1 — the engine now resolves the rate ONCE PER CLOCK
+// RECORD using the underlying schedule_shifts row's role + start_time +
+// end_time. Previously this used an empty-shift placeholder, which meant
+// rate rules never matched (role and time-of-day multipliers shipped
+// inert). Per-record resolution is what makes the rule engine honest.
 // =============================================================================
 
 import "server-only";
-import { listClockRecordsForUser } from "../../data/clock-records";
-import { listAllStaff } from "@/lib/data/staff";
+import {
+  listClockRecordsInPeriod,
+} from "../../data/clock-records";
+import { getShiftsByIds } from "../../data/weeks";
 import { listRateRules } from "../data/rate-rules";
 import { listAllRates, getRateOn } from "../data/rates";
 import { getOvertimeRules } from "../data/overtime-rules";
 import { listHolidaysInRange } from "../data/holidays";
 import { getSettings } from "../data/settings";
 import {
-  buildLineItems,
+  buildLineItemsPerRecord,
   type EngineLineItemDraft,
-  flatResolvedRates,
+  type ResolvedRate,
 } from "./line-item-aggregation";
 import {
   classifyHoursForPeriod,
   defaultRestDayResolver,
 } from "./overtime-classification";
 import { resolveRateForShift } from "./rate-resolution";
+import { dateInTimezone } from "@/lib/timezone";
 import type { ClockRecord } from "../../types";
+import type { ScheduleShift } from "../../types";
 
 export interface ComputeEngineItemsInput {
   runId: string;
@@ -34,20 +44,20 @@ export interface ComputeEngineItemsInput {
 
 /**
  * Compute engine line items for the given run window. Pulls every locked
- * clock record whose clocked_in_at falls within [periodStart, periodEnd+1).
+ * clock record whose clocked_in_at falls within [periodStart, periodEnd+1)
+ * via a single query, batches the parent-shift fetch, then resolves a per-
+ * record rate using the shift's role + start/end window.
  */
 export async function computeEngineItems(
   input: ComputeEngineItemsInput
 ): Promise<{ drafts: EngineLineItemDraft[]; clockRecords: ClockRecord[] }> {
-  const [allStaff, otRules, settings, rateRules, allRates, holidays] =
-    await Promise.all([
-      listAllStaff(),
-      getOvertimeRules(),
-      getSettings(),
-      listRateRules(),
-      listAllRates(),
-      listHolidaysInRange(input.periodStart, input.periodEnd),
-    ]);
+  const [otRules, settings, rateRules, allRates, holidays] = await Promise.all([
+    getOvertimeRules(),
+    getSettings(),
+    listRateRules(),
+    listAllRates(),
+    listHolidaysInRange(input.periodStart, input.periodEnd),
+  ]);
 
   if (!otRules || !settings) {
     return { drafts: [], clockRecords: [] };
@@ -59,81 +69,83 @@ export async function computeEngineItems(
   const periodStartIso = `${input.periodStart}T00:00:00Z`;
   const periodEndExclusiveIso = nextDayIso(input.periodEnd);
 
-  // Pull locked clock records for every staff in the period. We page per-staff
-  // to keep the query small.
-  const allRecords: ClockRecord[] = [];
-  for (const staff of allStaff) {
-    const recs = await listClockRecordsForUser(staff.id, 1000);
-    for (const r of recs) {
-      if (r.status !== "locked") continue;
-      if (r.clocked_in_at < periodStartIso) continue;
-      if (r.clocked_in_at >= periodEndExclusiveIso) continue;
-      allRecords.push(r);
+  // 1. Pull every locked clock record in one query.
+  const allRecords = await listClockRecordsInPeriod(
+    periodStartIso,
+    periodEndExclusiveIso
+  );
+
+  // 2. Batched shift fetch — every record's parent in one round trip.
+  const distinctShiftIds = Array.from(
+    new Set(allRecords.map((r) => r.shift_id))
+  );
+  const shifts = await getShiftsByIds(distinctShiftIds);
+  const shiftById = new Map<string, ScheduleShift>(
+    shifts.map((s) => [s.id, s])
+  );
+
+  // 3. Per-record rate resolution. Orphan records (no parent shift) are
+  //    SKIPPED with a warning rather than failed — a failed engine run
+  //    blocks payroll, while a skipped record produces visibly-incorrect
+  //    totals that the manager can investigate. Bias to non-blocking
+  //    recovery.
+  const baseRates = new Map<string, number>();
+  const perRecordResolved = new Map<string, ResolvedRate>();
+  const usableRecords: ClockRecord[] = [];
+
+  for (const record of allRecords) {
+    const shift = shiftById.get(record.shift_id);
+    if (!shift) {
+      console.warn(
+        `[payroll engine] orphan clock record ${record.id} skipped (parent shift ${record.shift_id} missing)`
+      );
+      continue;
     }
+    const recordDate = dateInTimezone(record.clocked_in_at, timezone);
+    let baseRate = baseRates.get(record.user_id);
+    if (baseRate === undefined) {
+      const rate = await getRateOn(record.user_id, recordDate);
+      baseRate = rate?.hourly_rate ?? 0;
+      baseRates.set(record.user_id, baseRate);
+    }
+    const resolved = resolveRateForShift({
+      baseRate,
+      role: shift.role,
+      shiftStartTime: shift.start_time,
+      shiftEndTime: shift.end_time,
+      rules: rateRules,
+    });
+    perRecordResolved.set(record.id, {
+      staffId: record.user_id,
+      effectiveRate: resolved.effectiveRate,
+      multipliersApplied: resolved.multipliersApplied,
+    });
+    usableRecords.push(record);
   }
 
-  // Classify. The venue timezone is read from payroll settings so a
-  // future non-SG venue only changes a single config row rather than
-  // every date math call-site.
+  // 4. Classify hours via the OT engine (timezone-aware).
   const classified = classifyHoursForPeriod({
-    clockRecords: allRecords,
+    clockRecords: usableRecords,
     overtimeRules: otRules,
     holidays,
     restDayResolver: defaultRestDayResolver(otRules, timezone),
     timezone,
   });
 
-  // Resolve per-staff rate (uses period_start as the "as-of" date for now;
-  // a richer model would resolve per-record).
-  const baseRates = new Map<string, number>();
-  const perStaffRR = new Map<
-    string,
-    { staffId: string; effectiveRate: number; multipliersApplied: Record<string, number> }
-  >();
-  for (const staff of allStaff) {
-    const rate = await getRateOn(staff.id, input.periodStart);
-    const baseRate = rate?.hourly_rate ?? 0;
-    baseRates.set(staff.id, baseRate);
-    // We don't yet have role/shift breakdown at engine entry — apply rate
-    // multipliers by treating the role as the staff's most-recent qualification
-    // is omitted; the engine simply passes through baseRate. Rate rules with
-    // role=null don't apply, so for now resolved = base × 1.0 unless time-of-day
-    // rules cover the entire 24h window which is unlikely.
-    const resolved = resolveRateForShift({
-      baseRate,
-      role: "",
-      shiftStartTime: "00:00",
-      shiftEndTime: "00:00",
-      rules: rateRules,
-    });
-    perStaffRR.set(staff.id, {
-      staffId: staff.id,
-      effectiveRate: resolved.effectiveRate,
-      multipliersApplied: resolved.multipliersApplied,
-    });
-  }
-
-  const resolvedRates = flatResolvedRates(perStaffRR, [
-    "regular",
-    "daily_ot",
-    "weekly_ot",
-    "rest_day",
-    "public_holiday",
-  ]);
-
-  const drafts = buildLineItems({
+  // 5. Build line items per-record so different rates within the same
+  //    (staff, kind) split into separate lines.
+  const drafts = buildLineItemsPerRecord({
     runId: input.runId,
     classifiedHours: classified,
-    resolvedRates,
+    perRecordResolved,
     settings,
     baseRates,
   });
 
-  // Suppress unused variable warning — allRates is currently passed
-  // through reconciliation snapshots only.
+  // allRates is currently passed through reconciliation snapshots only.
   void allRates;
 
-  return { drafts, clockRecords: allRecords };
+  return { drafts, clockRecords: usableRecords };
 }
 
 function nextDayIso(date: string): string {
