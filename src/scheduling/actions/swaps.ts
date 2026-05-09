@@ -8,12 +8,12 @@ import {
   acceptChangeRequest,
   createChangeRequest,
   getChangeRequest,
+  reverseSwap,
   setChangeRequestStatus,
 } from "../data/shift-change-requests";
 import {
   getShift,
   listSameDayShiftsForUser,
-  setShiftUser,
 } from "../data/weeks";
 import { listAllQualifications } from "../data/qualifications";
 import { listFtAssignments } from "../data/ft-assignments";
@@ -386,12 +386,10 @@ export async function reverseSwapAction(input: {
     return { success: false, error: "Shift has already started; cannot reverse" };
   }
 
-  const restore = await setShiftUser(shift.id, request.requested_by);
-  if (!restore.success) return { success: false, error: restore.error };
-
-  const result = await setChangeRequestStatus(
+  // S26 Critical 1 fix: atomic reversal via schedule_reverse_swap RPC.
+  // Mock mode mirrors the atomicity with throw-rollback.
+  const result = await reverseSwap(
     input.requestId,
-    "reversed",
     current.staff.id,
     input.note
   );

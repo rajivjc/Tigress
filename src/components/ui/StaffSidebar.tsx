@@ -50,6 +50,7 @@ const managerLinks: SidebarLink[] = [
   { href: "/manager/scheduling/swaps", label: "Swap activity", icon: ArrowLeftRight },
   { href: "/manager/settings/shift-templates", label: "Shift templates", icon: ListChecks },
   { href: "/manager/users", label: "Staff users", icon: Users },
+  { href: "/manager/payroll", label: "Payroll", icon: DollarSign },
   { href: "/checklists/templates", label: "Checklist templates", icon: ListChecks },
   { href: "/checklists/history", label: "Checklist history", icon: History },
 ];

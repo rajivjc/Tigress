@@ -244,6 +244,7 @@ export type ScheduleAuditEventType =
   | "schedule.clock.correction_denied"
   | "schedule.clock.locked"
   | "schedule.clock.unlocked"
+  | "schedule.clock.created_by_manager"
   // Runtime — swaps
   | "schedule.swap.requested"
   | "schedule.swap.giveaway_posted"

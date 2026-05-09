@@ -8,6 +8,7 @@ import { writeScheduleAuditLog } from "../audit";
 import {
   clockIn,
   clockOut,
+  createClockRecordAsManager,
   getClockRecord,
   getClockRecordForShift,
   lockClockRecords,
@@ -123,6 +124,15 @@ export async function requestClockCorrectionAction(
   if (!record) return { success: false, error: "Clock record not found" };
   if (record.user_id !== current.staff.id) {
     return { success: false, error: "Cannot request a correction on another user's record" };
+  }
+  // S26 Medium 4 fix: corrections only make sense after clock-out. An
+  // active record means the staff is still on shift — they can just clock
+  // out normally, no correction request needed.
+  if (record.status === "active") {
+    return {
+      success: false,
+      error: "Clock out before requesting a correction",
+    };
   }
 
   const result = await createCorrection({
@@ -295,6 +305,71 @@ export async function lockClockRecordsAction(
   );
   revalidatePath("/manager/scheduling/clock-review");
   return { success: true, locked: result.locked };
+}
+
+/**
+ * S26 Medium 5 fix: manager creates a clock record for a past shift where
+ * the staff member forgot to clock in. Validates that:
+ *   * the shift exists and is in a non-future date
+ *   * the user is the shift's assignee
+ *   * no clock record already exists for this (shift, user)
+ * Created in pending_review with manager_edited=true and the note.
+ */
+export interface CreateClockRecordAsManagerInput {
+  shiftId: string;
+  userId: string;
+  clockedInAt: string;
+  clockedOutAt: string;
+  note: string;
+}
+
+export async function createClockRecordAsManagerAction(
+  input: CreateClockRecordAsManagerInput
+): Promise<{ success: boolean; recordId?: string; error?: string }> {
+  const current = await getCurrentStaff();
+  if (!current) return { success: false, error: "Not signed in" };
+  if (!isManager(current.role)) {
+    return { success: false, error: "Manager or owner role required" };
+  }
+  if (!input.note.trim()) {
+    return { success: false, error: "Note is required" };
+  }
+
+  const { getShift } = await import("../data/weeks");
+  const shift = await getShift(input.shiftId);
+  if (!shift) return { success: false, error: "Shift not found" };
+  if (shift.user_id !== input.userId) {
+    return {
+      success: false,
+      error: "User is not the assignee of this shift",
+    };
+  }
+
+  const result = await createClockRecordAsManager({
+    shiftId: input.shiftId,
+    userId: input.userId,
+    clockedInAt: input.clockedInAt,
+    clockedOutAt: input.clockedOutAt,
+    note: input.note,
+  });
+  if (!result.success || !result.record) {
+    return { success: false, error: result.error };
+  }
+
+  await writeScheduleAuditLog(
+    "schedule.clock.created_by_manager",
+    result.record.id,
+    current.staff.id,
+    {
+      shift_id: input.shiftId,
+      user_id: input.userId,
+      clocked_in_at: input.clockedInAt,
+      clocked_out_at: input.clockedOutAt,
+      note: input.note,
+    }
+  );
+  revalidatePath("/manager/scheduling/clock-review");
+  return { success: true, recordId: result.record.id };
 }
 
 export async function unlockClockRecordAction(input: {

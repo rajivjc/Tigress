@@ -789,6 +789,104 @@ swaps, or no-shows yet (S26); no payroll (S27).
   no-show tracking, payroll. Mid-week archive cron also deferred —
   archiving is an explicit manager action for now.
 
+## RLS NULL-coalescence rule
+
+Every `USING` and `WITH CHECK` clause that is not strictly a
+manager/owner-only branch MUST be wrapped in a
+`public.get_staff_role() IN ('staff', 'manager', 'owner')` envelope. A
+bare equality like `kind = 'giveaway'` or `status = 'published'`
+evaluates TRUE for any row regardless of who's asking, which leaks rows
+to non-staff (e.g. members) where `get_staff_role()` returns NULL. Two
+consecutive sessions (S25, S26) shipped policies with this bug; the
+rule exists to make institutional memory explicit. The
+`tests/security/rls-pattern.test.ts` grep guard fails CI if a new
+policy is missing the envelope. Manager-only branches that already
+use `public.get_staff_role() IN ('manager', 'owner')` are fine — the
+check passes when *any* `get_staff_role()` reference appears in the
+clause.
+
+## Payroll engine (Session 27a)
+
+Payroll lives in `src/scheduling/payroll/` as a subpackage of the
+scheduling module. Tables prefixed `schedule_payroll_*`, audit events
+prefixed `payroll.*` (distinct from `schedule.*` — different audience,
+retention needs differ).
+
+- **Schema (migration 020):** `schedule_payroll_settings` (singleton
+  config), `schedule_payroll_rates` (per-staff rate history with
+  `effective_from`/`effective_until`), `schedule_payroll_rate_rules`
+  (configurable role + time-of-day multipliers),
+  `schedule_payroll_overtime_rules` (singleton OT config; SG defaults
+  44h/wk weekly OT, no daily OT, 1.5× OT, 2× rest, 2× PH),
+  `schedule_payroll_holidays` (PH calendar; 2026 SG seeded),
+  `schedule_payroll_runs` (one per pay period; lifecycle
+  `draft → review → locked`), `schedule_payroll_line_items` (generic
+  kind discriminator: hours/overtime/rest_day/public_holiday/allowance/
+  tip/bonus/deduction/statutory/other; `source='engine'` deleted+
+  recreated on recompute, `source='manual'` preserved),
+  `schedule_payroll_run_reconciliation` (snapshot at lock time so
+  locked runs are stable; pattern parallels `comp_promotion_decisions`).
+- **Pure libs (zero deps, fully tested):**
+  - `lib/rate-resolution.ts` — multipliers compose multiplicatively;
+    role multiplier + time-of-day multipliers stack.
+  - `lib/overtime-classification.ts` — application order PH > rest day
+    > daily OT > weekly OT > regular. Each clock-record-hour goes into
+    exactly one bucket. Weekly thresholds compute against the staff's
+    running total within the period.
+  - `lib/line-item-aggregation.ts` — one engine line item per (staff,
+    classification kind) pair; multiple shifts of the same kind
+    aggregate into one summary line.
+- **Run lifecycle:**
+  - `draft` — manager runs engine, edits manual line items, recomputes.
+  - `review` — manager attests; reconciliation enforces no `active`/
+    `pending_review` clock records remain for the period.
+  - `locked` — owner-only; reconciliation snapshot persisted; CSV
+    export available. Unlock requires a note (S24b2 pattern, third
+    reuse).
+- **Hours ingestion:** `getBookingsNeedingReminder`-style filter on
+  `schedule_clock_records WHERE status = 'locked'` for the period
+  window. Manual line items survive recompute; engine items are
+  deleted+recreated.
+- **CSV export:** flat one-row-per-staff-per-period format. All line
+  items aggregated as columns; deductions stored with negative sign
+  on rows; `net = sum of all amounts`.
+- **Authorization split:** owner-only for rate config, lock, unlock,
+  CSV export. Manager+owner for run create, recompute, line-item
+  edits, attest. Defense-in-depth — server actions check role; RLS
+  enforces independently.
+- **Push notifications:** lock fires "Your payslip for [period] is
+  finalised" to every staff with line items in the run. Unlock fires
+  "Your payslip for [period] is being revised". Line-item edits and
+  recomputes don't push (manager-internal noise).
+- **Mock mode:** all data accessors dual-mode. SG defaults pre-seeded
+  in `src/scheduling/payroll/data/mock-data.ts`. Mock atomicity uses
+  throw-rollback pattern.
+- **Out of scope this session (deferred to S27b):** PDF payslip
+  generation, JSON export, staff-side `/staff/payroll` view, owner
+  settings UI for rate config / OT rules / holidays. Server actions
+  for owner config exist but admin pages are S27b. SG CPF off by
+  default; configurable single % statutory deduction available.
+
+## S26 fixes folded into S27a
+
+- `schedule_reverse_swap` RPC + `reverseSwapAction` rewired: the swap
+  reversal now atomically updates `schedule_shifts.user_id` AND
+  request status in a single transaction, eliminating the partial-
+  state hazard from S26 Critical 1.
+- `schedule_shift_change_requests` SELECT policy tightened with
+  `get_staff_role()` envelope on the giveaway branch (S26 Critical 2).
+- `managerEditClockRecord` branches on status: `active` records keep
+  `clock_out` empty + retain `active` status; `pending_review`
+  records get the new `clock_out` with `pending_review` retained;
+  `locked` records are rejected (S26 Medium 3).
+- `requestClockCorrectionAction` rejects when the underlying record
+  is still `active` — corrections only make sense after the staff
+  has clocked out (S26 Medium 4).
+- `createClockRecordAsManagerAction` recovers "forgot to clock in"
+  past shifts: validates ownership + no-existing-record, creates the
+  row in `pending_review` with `manager_edited=true` and the note
+  (S26 Medium 5). Audit event `schedule.clock.created_by_manager`.
+
 ### Environment variables
 
 | Name | Purpose | Required for |

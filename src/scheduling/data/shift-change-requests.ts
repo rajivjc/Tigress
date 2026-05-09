@@ -218,6 +218,69 @@ export async function acceptChangeRequest(
   return { success: true, request: refetched ?? undefined };
 }
 
+/**
+ * Atomic swap reversal (S26 Critical 1 fix). Real mode delegates to the
+ * schedule_reverse_swap RPC that updates BOTH the request status AND the
+ * shift's user_id in one transaction. Mock mode mirrors the same atomicity
+ * with throw-rollback so any partial failure unwinds.
+ */
+export async function reverseSwap(
+  requestId: string,
+  reverserStaffId: string,
+  note: string
+): Promise<{ success: boolean; request?: ShiftChangeRequest; error?: string }> {
+  if (!note.trim()) {
+    return { success: false, error: "Reversal note is required" };
+  }
+
+  if (!isSupabaseConfigured()) {
+    const req = MOCK_SCHEDULE_SHIFT_CHANGE_REQUESTS.find(
+      (r) => r.id === requestId
+    );
+    if (!req) return { success: false, error: "Request not found" };
+    if (req.status !== "accepted") {
+      return { success: false, error: "Only accepted swaps can be reversed" };
+    }
+    const shift = MOCK_SCHEDULE_SHIFTS.find((s) => s.id === req.shift_id);
+    if (!shift) return { success: false, error: "Shift not found" };
+
+    // Snapshot for throw-rollback.
+    const prevShiftUser = shift.user_id;
+    const prevReqStatus = req.status;
+    const prevReqResolvedAt = req.resolved_at;
+    const prevReversalNote = req.reversal_note;
+    try {
+      shift.user_id = req.requested_by;
+      shift.updated_at = nowIso();
+      req.status = "reversed";
+      req.reversal_note = note;
+      req.resolved_at = nowIso();
+      req.updated_at = nowIso();
+      return { success: true, request: req };
+    } catch (err) {
+      // Rollback both rows.
+      shift.user_id = prevShiftUser;
+      req.status = prevReqStatus;
+      req.resolved_at = prevReqResolvedAt;
+      req.reversal_note = prevReversalNote;
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : "Reverse failed",
+      };
+    }
+  }
+
+  const supabase = createClient();
+  const { error } = await supabase.rpc("schedule_reverse_swap", {
+    p_request_id: requestId,
+    p_reverser_staff_id: reverserStaffId,
+    p_note: note,
+  });
+  if (error) return { success: false, error: error.message };
+  const refetched = await getChangeRequest(requestId);
+  return { success: true, request: refetched ?? undefined };
+}
+
 export async function setChangeRequestStatus(
   requestId: string,
   status: Exclude<ShiftChangeStatus, "accepted">,
