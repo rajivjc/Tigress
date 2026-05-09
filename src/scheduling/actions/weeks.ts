@@ -355,7 +355,9 @@ export async function publishWeekAction(
     }
   );
 
-  // Notify every assigned user.
+  // Notify every assigned user — parallelised to keep publish snappy with
+  // many staff. Each push is fire-and-forget already, so Promise.all
+  // settles when the slowest finishes rather than serialising them.
   const userIds = Array.from(
     new Set(
       shifts
@@ -363,21 +365,22 @@ export async function publishWeekAction(
         .filter((id): id is string => Boolean(id))
     )
   );
-  // Group by user to count their shifts.
   const counts = new Map<string, number>();
   for (const s of shifts) {
     if (!s.user_id) continue;
     counts.set(s.user_id, (counts.get(s.user_id) ?? 0) + 1);
   }
-  for (const userId of userIds) {
-    const n = counts.get(userId) ?? 0;
-    await sendPushToStaff(userId, {
-      title: "Your shifts are up",
-      body: `${n} shift${n === 1 ? "" : "s"} this week`,
-      url: "/staff/schedule",
-      tag: `schedule-week-${input.weekId}`,
-    });
-  }
+  await Promise.all(
+    userIds.map((userId) => {
+      const n = counts.get(userId) ?? 0;
+      return sendPushToStaff(userId, {
+        title: "Your shifts are up",
+        body: `${n} shift${n === 1 ? "" : "s"} this week`,
+        url: "/staff/schedule",
+        tag: `schedule-week-${input.weekId}`,
+      });
+    })
+  );
 
   revalidatePath("/manager/scheduling");
   revalidatePath("/staff/schedule");

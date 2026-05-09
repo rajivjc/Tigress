@@ -199,4 +199,56 @@ describe("validateWeekCoverage", () => {
     expect(reports.get("s-bar")?.unfilled_roles).toContain("floor");
     expect(reports.get("s-floor")?.unfilled_roles).toContain("floor");
   });
+
+  // ----- S26 fix-up coverage of S25 audit findings -----
+
+  it("over-staffed templates report ok with zero gaps", () => {
+    const monday = "2026-05-04";
+    const dc = [coverage("pm", 0, { bartender: 1 })];
+    const shifts = [
+      shift({ id: "a", template_id: "pm", shift_date: monday, role: "bartender", user_id: "u1" }),
+      shift({ id: "b", template_id: "pm", shift_date: monday, role: "bartender", user_id: "u2" }),
+    ];
+    const r = validateWeekCoverage({ shifts, dayCoverage: dc });
+    expect(r.ok).toBe(true);
+    expect(r.gaps).toEqual([]);
+  });
+
+  it("a shift assigned with the wrong role does not fill the requirement", () => {
+    const monday = "2026-05-04";
+    const dc = [coverage("pm", 0, { mod: 1 })];
+    const shifts = [
+      shift({ id: "wrong", template_id: "pm", shift_date: monday, role: "bartender", user_id: "u1" }),
+    ];
+    const r = validateWeekCoverage({ shifts, dayCoverage: dc });
+    expect(r.ok).toBe(false);
+    expect(r.gaps.find((g) => g.role === "mod")).toBeDefined();
+  });
+
+  it("MOD requirement on a multi-role shift surfaces as a separate gap", () => {
+    const monday = "2026-05-04";
+    const dc = [coverage("pm", 0, { bartender: 1, mod: 1, floor: 1 })];
+    const shifts = [
+      shift({ id: "a", template_id: "pm", shift_date: monday, role: "bartender", user_id: "u1" }),
+      shift({ id: "b", template_id: "pm", shift_date: monday, role: "floor", user_id: "u2" }),
+    ];
+    const r = validateWeekCoverage({ shifts, dayCoverage: dc });
+    expect(r.ok).toBe(false);
+    expect(r.gaps.map((g) => g.role)).toContain("mod");
+  });
+
+  it("multi-shift-per-day weeks compute coverage per (date, template) independently", () => {
+    const monday = "2026-05-04";
+    const dc = [
+      coverage("am", 0, { bartender: 1 }),
+      coverage("pm", 0, { bartender: 1 }),
+    ];
+    const shifts = [
+      shift({ id: "am-1", template_id: "am", shift_date: monday, role: "bartender", user_id: "u1" }),
+      shift({ id: "pm-1", template_id: "pm", shift_date: monday, role: "bartender", user_id: null }),
+    ];
+    const r = validateWeekCoverage({ shifts, dayCoverage: dc });
+    expect(r.gaps.length).toBe(1);
+    expect(r.gaps[0].template_id).toBe("pm");
+  });
 });

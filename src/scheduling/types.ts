@@ -126,6 +126,93 @@ export interface DraftShift {
   user_id: string | null;
 }
 
+// ---------- Runtime entities (Session 26) ----------
+
+export type ClockRecordStatus = "active" | "pending_review" | "locked";
+
+export interface ClockRecord {
+  id: string;
+  shift_id: string;
+  user_id: string;
+  clocked_in_at: string;
+  clocked_out_at: string | null;
+  status: ClockRecordStatus;
+  locked_at: string | null;
+  locked_by: string | null;
+  unlock_note: string | null;
+  manager_edited: boolean;
+  manager_edit_note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type CorrectionStatus = "pending" | "approved" | "denied";
+
+export interface ClockCorrection {
+  id: string;
+  clock_record_id: string;
+  requested_by: string;
+  proposed_clocked_in_at: string | null;
+  proposed_clocked_out_at: string | null;
+  reason: string;
+  status: CorrectionStatus;
+  resolved_by: string | null;
+  resolved_at: string | null;
+  resolution_note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ShiftChangeKind = "direct_swap" | "giveaway";
+export type ShiftChangeStatus =
+  | "pending"
+  | "accepted"
+  | "declined"
+  | "cancelled"
+  | "reversed";
+
+export interface ShiftChangeRequest {
+  id: string;
+  kind: ShiftChangeKind;
+  shift_id: string;
+  requested_by: string;
+  target_user_id: string | null;
+  status: ShiftChangeStatus;
+  accepted_by: string | null;
+  resolved_at: string | null;
+  reversal_note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type AttendanceStatus = "expected" | "excused" | "no_show";
+
+export interface ShiftAttendance {
+  shift_id: string;
+  attendance_status: AttendanceStatus;
+  marked_by: string | null;
+  marked_at: string | null;
+  note: string | null;
+  updated_at: string;
+}
+
+export type ShiftNotificationKind = "one_hour_warning";
+
+export interface ShiftNotificationSent {
+  shift_id: string;
+  kind: ShiftNotificationKind;
+  sent_at: string;
+}
+
+/** UI state derived from shift + clock + attendance — never stored. */
+export type ShiftAttendanceState =
+  | "expected"
+  | "clocked_in"
+  | "completed"
+  | "missing"
+  | "excused"
+  | "no_show";
+
 // ---------- Audit event types ----------
 
 export type ScheduleAuditEventType =
@@ -147,4 +234,25 @@ export type ScheduleAuditEventType =
   | "schedule.shift.removed"
   | "schedule.week.published"
   | "schedule.week.published_with_override"
-  | "schedule.week.unpublished";
+  | "schedule.week.unpublished"
+  // Runtime — clock
+  | "schedule.clock.in"
+  | "schedule.clock.out"
+  | "schedule.clock.edited"
+  | "schedule.clock.correction_requested"
+  | "schedule.clock.correction_approved"
+  | "schedule.clock.correction_denied"
+  | "schedule.clock.locked"
+  | "schedule.clock.unlocked"
+  // Runtime — swaps
+  | "schedule.swap.requested"
+  | "schedule.swap.giveaway_posted"
+  | "schedule.swap.accepted"
+  | "schedule.swap.giveaway_claimed"
+  | "schedule.swap.declined"
+  | "schedule.swap.cancelled"
+  | "schedule.swap.reversed"
+  // Runtime — attendance
+  | "schedule.shift.no_show"
+  | "schedule.shift.excused"
+  | "schedule.shift.attendance_cleared";

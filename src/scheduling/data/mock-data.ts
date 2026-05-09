@@ -9,9 +9,14 @@
 
 import type {
   AvailabilityBlock,
+  ClockCorrection,
+  ClockRecord,
   FtAssignment,
   ScheduleShift,
   ScheduleWeek,
+  ShiftAttendance,
+  ShiftChangeRequest,
+  ShiftNotificationSent,
   ShiftTemplate,
   TemplateDayCoverage,
   UserQualification,
@@ -244,8 +249,23 @@ export const MOCK_SCHEDULE_AVAILABILITY: AvailabilityBlock[] =
 export const MOCK_SCHEDULE_WEEKS: ScheduleWeek[] = [];
 export const MOCK_SCHEDULE_SHIFTS: ScheduleShift[] = [];
 
+// ---------- Runtime arrays (Session 26) ----------
+// Empty by default — populated lazily by the runtime flows (clock-in,
+// swap requests, attendance flags, cron dedup).
+
+export const MOCK_SCHEDULE_CLOCK_RECORDS: ClockRecord[] = [];
+export const MOCK_SCHEDULE_CLOCK_CORRECTIONS: ClockCorrection[] = [];
+export const MOCK_SCHEDULE_SHIFT_CHANGE_REQUESTS: ShiftChangeRequest[] = [];
+export const MOCK_SCHEDULE_SHIFT_ATTENDANCE: ShiftAttendance[] = [];
+export const MOCK_SCHEDULE_SHIFT_NOTIFICATIONS_SENT: ShiftNotificationSent[] = [];
+
 /** Test hook — full reset of the lazily-created weeks + shifts. */
 export function __resetMockScheduleWeeks(): void {
   MOCK_SCHEDULE_WEEKS.length = 0;
   MOCK_SCHEDULE_SHIFTS.length = 0;
+  MOCK_SCHEDULE_CLOCK_RECORDS.length = 0;
+  MOCK_SCHEDULE_CLOCK_CORRECTIONS.length = 0;
+  MOCK_SCHEDULE_SHIFT_CHANGE_REQUESTS.length = 0;
+  MOCK_SCHEDULE_SHIFT_ATTENDANCE.length = 0;
+  MOCK_SCHEDULE_SHIFT_NOTIFICATIONS_SENT.length = 0;
 }
