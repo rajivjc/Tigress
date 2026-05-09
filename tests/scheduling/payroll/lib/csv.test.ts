@@ -15,6 +15,8 @@ const RUN: PayrollRun = {
   status: "locked",
   locked_at: FIXED_TS,
   locked_by: "owner-1",
+  unlocked_at: null,
+  unlocked_by: null,
   unlock_note: null,
   last_computed_at: FIXED_TS,
   last_exported_at: null,

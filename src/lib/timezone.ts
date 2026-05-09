@@ -75,6 +75,46 @@ export function hourOfDaySGT(date: Date): number {
   return Number.parseInt(h, 10);
 }
 
+/**
+ * Generic helper: formats an ISO timestamp as a YYYY-MM-DD calendar date in
+ * the given IANA timezone. Falls back to the SGT fast-path when callers pass
+ * `VENUE_TIMEZONE` so most call sites pay nothing for the abstraction. Used
+ * by the payroll OT engine so per-venue timezone configuration threads
+ * through into date math.
+ */
+export function dateInTimezone(iso: string, timezone: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(`Invalid ISO timestamp: ${iso}`);
+  }
+  if (timezone === VENUE_TIMEZONE) {
+    return formatDateSGT(date);
+  }
+  const fmt = new Intl.DateTimeFormat("en-GB", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const parts = fmt.formatToParts(date);
+  const y = parts.find((p) => p.type === "year")?.value ?? "1970";
+  const m = parts.find((p) => p.type === "month")?.value ?? "01";
+  const d = parts.find((p) => p.type === "day")?.value ?? "01";
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * Returns the day-of-week (0=Sunday..6=Saturday) for an ISO timestamp in the
+ * given timezone. We derive it by re-parsing the YYYY-MM-DD calendar date
+ * (which is timezone-correct) as UTC and asking for `getUTCDay()`. Pure
+ * arithmetic — no recursive timezone gymnastics.
+ */
+export function dayOfWeekInTimezone(iso: string, timezone: string): number {
+  const ymd = dateInTimezone(iso, timezone);
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
+
 // ---------- Internals ----------
 
 const formatter = new Intl.DateTimeFormat("en-GB", {

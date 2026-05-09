@@ -15,6 +15,7 @@ const SETTINGS: PayrollSettings = {
   default_export_format: "csv",
   statutory_deduction_pct: 0,
   currency: "SGD",
+  timezone: "Asia/Singapore",
   created_at: FIXED_TS,
   updated_at: FIXED_TS,
 };

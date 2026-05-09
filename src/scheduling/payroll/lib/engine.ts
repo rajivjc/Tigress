@@ -53,6 +53,8 @@ export async function computeEngineItems(
     return { drafts: [], clockRecords: [] };
   }
 
+  const timezone = settings.timezone ?? "Asia/Singapore";
+
   // Period bounds (UTC ISO).
   const periodStartIso = `${input.periodStart}T00:00:00Z`;
   const periodEndExclusiveIso = nextDayIso(input.periodEnd);
@@ -70,12 +72,15 @@ export async function computeEngineItems(
     }
   }
 
-  // Classify.
+  // Classify. The venue timezone is read from payroll settings so a
+  // future non-SG venue only changes a single config row rather than
+  // every date math call-site.
   const classified = classifyHoursForPeriod({
     clockRecords: allRecords,
     overtimeRules: otRules,
     holidays,
-    restDayResolver: defaultRestDayResolver(otRules),
+    restDayResolver: defaultRestDayResolver(otRules, timezone),
+    timezone,
   });
 
   // Resolve per-staff rate (uses period_start as the "as-of" date for now;

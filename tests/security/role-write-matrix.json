@@ -1,0 +1,50 @@
+{
+  "_comment": "Per-table writer-role expectations. WRITE policies (INSERT, UPDATE, DELETE, FOR ALL) on each listed table must collectively allow exactly the role set declared under `writers.default`. Tables with status-aware splits also declare `writers.lock_transitions` plus the column + values that gate them. The accompanying test (tests/security/role-write-matrix.test.ts) parses the migrations and fails CI if a write policy diverges from this manifest, or if a `schedule_payroll_*` write policy exists for a table not declared here. Add new payroll tables here when introduced; the test forces explicit declaration. Scheduling-table backfill is opportunistic and tracked separately — see CLAUDE.md S27a-fix scope notes.",
+  "tables": [
+    {
+      "table": "schedule_payroll_settings",
+      "writers": {
+        "default": ["owner"]
+      }
+    },
+    {
+      "table": "schedule_payroll_rates",
+      "writers": {
+        "default": ["owner"]
+      }
+    },
+    {
+      "table": "schedule_payroll_rate_rules",
+      "writers": {
+        "default": ["owner"]
+      }
+    },
+    {
+      "table": "schedule_payroll_overtime_rules",
+      "writers": {
+        "default": ["owner"]
+      }
+    },
+    {
+      "table": "schedule_payroll_holidays",
+      "writers": {
+        "default": ["owner"]
+      }
+    },
+    {
+      "table": "schedule_payroll_runs",
+      "writers": {
+        "default": ["manager", "owner"],
+        "lock_transitions": ["owner"]
+      },
+      "lock_state_column": "status",
+      "lock_state_values": ["locked"]
+    },
+    {
+      "table": "schedule_payroll_line_items",
+      "writers": {
+        "default": ["manager", "owner"]
+      }
+    }
+  ]
+}
