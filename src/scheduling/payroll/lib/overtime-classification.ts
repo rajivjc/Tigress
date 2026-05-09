@@ -14,6 +14,7 @@
 // per-date total. Both thresholds are optional (NULL = disabled).
 // =============================================================================
 
+import { VENUE_TIMEZONE, dateInTimezone } from "@/lib/timezone";
 import type { ClockRecord } from "../../types";
 import type { PayrollHoliday, PayrollOvertimeRules } from "../types";
 
@@ -43,14 +44,16 @@ export interface OvertimeClassificationInput {
   overtimeRules: PayrollOvertimeRules;
   holidays: PayrollHoliday[];
   restDayResolver: RestDayResolver;
+  /**
+   * IANA timezone for venue-local date math (rest-day, daily threshold,
+   * ISO week boundaries). Defaults to Asia/Singapore so the existing
+   * call-sites and tests don't need to thread the value through.
+   */
+  timezone?: string;
 }
 
 const MS_PER_HOUR = 60 * 60 * 1000;
 const DAYS_PER_WEEK = 7;
-
-function dateOnly(iso: string): string {
-  return iso.slice(0, 10);
-}
 
 function hoursBetween(startIso: string, endIso: string): number {
   const start = new Date(startIso).getTime();
@@ -59,9 +62,16 @@ function hoursBetween(startIso: string, endIso: string): number {
   return Math.max(0, (end - start) / MS_PER_HOUR);
 }
 
-/** Returns the ISO Monday of the week containing `iso`. UTC math. */
-function isoWeekStart(iso: string): string {
-  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+/**
+ * Returns the ISO Monday (YYYY-MM-DD) of the week containing the given
+ * timestamp, in the supplied timezone. The venue's local calendar date is
+ * derived first, then plain UTC arithmetic walks back to Monday — this
+ * sidesteps the worst of the DST edge-cases since we never cross-mix tz
+ * conversions with day arithmetic.
+ */
+function isoWeekStartInTimezone(iso: string, timezone: string): string {
+  const ymd = dateInTimezone(iso, timezone);
+  const [y, m, d] = ymd.split("-").map(Number);
   const date = new Date(Date.UTC(y, m - 1, d));
   const sundayBased = date.getUTCDay();
   const mondayBased = (sundayBased + DAYS_PER_WEEK - 1) % DAYS_PER_WEEK;
@@ -69,8 +79,19 @@ function isoWeekStart(iso: string): string {
   return date.toISOString().slice(0, 10);
 }
 
+/**
+ * Builds a rest-day resolver from the OT rules. Optional `timezone` lets
+ * callers override the venue tz; otherwise the SGT default is used. The
+ * resolver receives an already-tz-correct YYYY-MM-DD from
+ * `classifyHoursForPeriod`, so it doesn't need the timezone itself for
+ * the day-of-week math.
+ */
 export function defaultRestDayResolver(
-  rules: PayrollOvertimeRules
+  rules: PayrollOvertimeRules,
+  // The timezone parameter is reserved for future strategies that need it
+  // (configured_per_staff). The "sunday" branch reads the YYYY-MM-DD that
+  // the engine already converted into venue-local time.
+  _timezone: string = VENUE_TIMEZONE
 ): RestDayResolver {
   if (rules.rest_day_strategy === "sunday") {
     return (_staffId, isoDate) => {
@@ -87,7 +108,13 @@ export function defaultRestDayResolver(
 export function classifyHoursForPeriod(
   input: OvertimeClassificationInput
 ): ClassifiedHours[] {
-  const { clockRecords, overtimeRules, holidays, restDayResolver } = input;
+  const {
+    clockRecords,
+    overtimeRules,
+    holidays,
+    restDayResolver,
+    timezone = VENUE_TIMEZONE,
+  } = input;
 
   const holidayDates = new Set(
     holidays.filter((h) => h.is_active).map((h) => h.date)
@@ -107,8 +134,8 @@ export function classifyHoursForPeriod(
     .filter((r) => r.clocked_out_at !== null)
     .map((r) => ({
       record: r,
-      date: dateOnly(r.clocked_in_at),
-      weekStart: isoWeekStart(r.clocked_in_at),
+      date: dateInTimezone(r.clocked_in_at, timezone),
+      weekStart: isoWeekStartInTimezone(r.clocked_in_at, timezone),
       duration: hoursBetween(r.clocked_in_at, r.clocked_out_at!),
     }))
     // Sort chronologically so daily/weekly running totals are deterministic.

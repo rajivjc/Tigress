@@ -37,6 +37,7 @@ export interface UpdateSettingsInput {
   default_export_format?: PayrollExportFormat;
   statutory_deduction_pct?: number;
   currency?: string;
+  timezone?: string;
 }
 
 export async function updateSettings(

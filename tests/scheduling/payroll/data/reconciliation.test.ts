@@ -133,4 +133,89 @@ describe("payroll reconciliation (mock mode)", () => {
     const r = await unlockRun(run.run!.id, "owner-1", "note");
     expect(r.success).toBe(false);
   });
+
+  // -------------------------------------------------------------------
+  // S27a-fix Finding 4: locked_by stays put across unlock; unlocked_by
+  // captures the most-recent unlock event.
+  // -------------------------------------------------------------------
+
+  it("unlockRun preserves locked_by/locked_at and stamps unlocked_by/unlocked_at", async () => {
+    const run = await createRun({
+      periodStart: "2026-05-01",
+      periodEnd: "2026-05-31",
+      paymentDate: "2026-06-07",
+    });
+    await setRunStatus(run.run!.id, "review");
+    await lockRunWithSnapshot(
+      {
+        runId: run.run!.id,
+        clockRecords: [],
+        ratesSnapshot: [],
+        overtimeRulesSnapshot: OT_RULES,
+        holidaysSnapshot: HOLIDAYS,
+      },
+      "owner-original"
+    );
+    const lockedSnapshot = await getRun(run.run!.id);
+    expect(lockedSnapshot?.locked_by).toBe("owner-original");
+    expect(lockedSnapshot?.unlocked_by).toBeNull();
+
+    const out = await unlockRun(
+      run.run!.id,
+      "owner-different",
+      "fixing rate row"
+    );
+    expect(out.success).toBe(true);
+    const fresh = await getRun(run.run!.id);
+    expect(fresh?.status).toBe("review");
+    // locked_by/at remain visible — they describe the prior lock event.
+    expect(fresh?.locked_by).toBe("owner-original");
+    expect(fresh?.locked_at).not.toBeNull();
+    // unlock fields capture the new actor + timestamp.
+    expect(fresh?.unlocked_by).toBe("owner-different");
+    expect(fresh?.unlocked_at).not.toBeNull();
+    expect(fresh?.unlock_note).toBe("fixing rate row");
+  });
+
+  it("re-lock cycle (lock → unlock → re-lock) leaves locked_by set to the second locker and unlocked_by from the original unlock", async () => {
+    const run = await createRun({
+      periodStart: "2026-05-01",
+      periodEnd: "2026-05-31",
+      paymentDate: "2026-06-07",
+    });
+    await setRunStatus(run.run!.id, "review");
+
+    // 1st lock
+    await lockRunWithSnapshot(
+      {
+        runId: run.run!.id,
+        clockRecords: [],
+        ratesSnapshot: [],
+        overtimeRulesSnapshot: OT_RULES,
+        holidaysSnapshot: HOLIDAYS,
+      },
+      "owner-1"
+    );
+
+    // Unlock
+    await unlockRun(run.run!.id, "owner-1", "needed correction");
+
+    // 2nd lock (different owner)
+    await lockRunWithSnapshot(
+      {
+        runId: run.run!.id,
+        clockRecords: [],
+        ratesSnapshot: [],
+        overtimeRulesSnapshot: OT_RULES,
+        holidaysSnapshot: HOLIDAYS,
+      },
+      "owner-2"
+    );
+
+    const fresh = await getRun(run.run!.id);
+    expect(fresh?.status).toBe("locked");
+    expect(fresh?.locked_by).toBe("owner-2"); // current lock
+    expect(fresh?.unlocked_by).toBe("owner-1"); // prior unlock event
+    expect(fresh?.unlock_note).toBeNull(); // cleared on re-lock
+  });
 });

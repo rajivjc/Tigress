@@ -26,6 +26,7 @@ export const MOCK_PAYROLL_SETTINGS: PayrollSettings[] = [
     default_export_format: "csv",
     statutory_deduction_pct: 0,
     currency: "SGD",
+    timezone: "Asia/Singapore",
     created_at: fixed,
     updated_at: fixed,
   },
@@ -132,6 +133,7 @@ export function __resetMockPayroll(): void {
     default_export_format: "csv",
     statutory_deduction_pct: 0,
     currency: "SGD",
+    timezone: "Asia/Singapore",
     created_at: fixed,
     updated_at: fixed,
   };

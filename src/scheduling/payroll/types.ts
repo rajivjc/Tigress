@@ -61,6 +61,10 @@ export interface PayrollSettings {
   default_export_format: PayrollExportFormat;
   statutory_deduction_pct: number;
   currency: string;
+  // IANA timezone string (e.g. "Asia/Singapore"). Threaded through the OT
+  // engine so date math runs in venue-local time. Migration 022 added the
+  // column; pre-022 mock fixtures default it to "Asia/Singapore" inline.
+  timezone: string;
   created_at: string;
   updated_at: string;
 }
@@ -114,8 +118,16 @@ export interface PayrollRun {
   period_end: string;
   payment_date: string;
   status: PayrollRunStatus;
+  // locked_by / locked_at carry the CURRENT lock — left intact across
+  // unlock so the UI can show "originally locked by …". Re-locking
+  // overwrites them.
   locked_at: string | null;
   locked_by: string | null;
+  // unlocked_by / unlocked_at carry the most-recent unlock event so the
+  // UI can render the lock → unlock → re-lock history without consulting
+  // the audit log.
+  unlocked_at: string | null;
+  unlocked_by: string | null;
   unlock_note: string | null;
   last_computed_at: string | null;
   last_exported_at: string | null;

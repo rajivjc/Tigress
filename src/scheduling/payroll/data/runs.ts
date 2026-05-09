@@ -72,6 +72,8 @@ export async function createRun(
       status: "draft",
       locked_at: null,
       locked_by: null,
+      unlocked_at: null,
+      unlocked_by: null,
       unlock_note: null,
       last_computed_at: null,
       last_exported_at: null,

@@ -647,4 +647,152 @@ describe("classifyHoursForPeriod", () => {
     });
     expect(out[0].kind).toBe("public_holiday");
   });
+
+  // ---------------------------------------------------------------------
+  // S27a-fix Finding 3: timezone-aware date math (Asia/Singapore default)
+  // ---------------------------------------------------------------------
+
+  it("cross-day SGT boundary: 16:30 UTC Sunday is Monday in SGT — classify as regular Monday hours, not Sunday rest_day", () => {
+    // 2026-04-26 16:30 UTC = 2026-04-27 00:30 SGT (Monday).
+    const out = classifyHoursForPeriod({
+      clockRecords: [
+        record({
+          id: "r1",
+          user_id: "u1",
+          clocked_in_at: "2026-04-26T16:30:00.000Z",
+          clocked_out_at: "2026-04-27T00:30:00.000Z", // 8h
+        }),
+      ],
+      overtimeRules: SG_DEFAULT_RULES,
+      holidays: [],
+      restDayResolver: defaultRestDayResolver(SG_DEFAULT_RULES),
+      // timezone defaults to Asia/Singapore — explicit here for clarity.
+      timezone: "Asia/Singapore",
+    });
+    expect(out[0].kind).toBe("regular");
+    expect(out[0].date).toBe("2026-04-27");
+  });
+
+  it("cross-day SGT boundary: 17:00 UTC Saturday is Sunday in SGT — classify as rest_day", () => {
+    // 2026-04-25 17:00 UTC = 2026-04-26 01:00 SGT (Sunday).
+    const out = classifyHoursForPeriod({
+      clockRecords: [
+        record({
+          id: "r1",
+          user_id: "u1",
+          clocked_in_at: "2026-04-25T17:00:00.000Z",
+          clocked_out_at: "2026-04-26T01:00:00.000Z",
+        }),
+      ],
+      overtimeRules: SG_DEFAULT_RULES,
+      holidays: [],
+      restDayResolver: defaultRestDayResolver(SG_DEFAULT_RULES),
+      timezone: "Asia/Singapore",
+    });
+    expect(out[0].kind).toBe("rest_day");
+    expect(out[0].date).toBe("2026-04-26");
+  });
+
+  it("daily threshold totals against venue date, not UTC date", () => {
+    // Two records, same SGT calendar date (2026-04-27), but split across the
+    // 2026-04-26/2026-04-27 UTC boundary.
+    //   r1 SGT Mon 00:00–06:00 (= UTC Sun 16:00–22:00)
+    //   r2 SGT Mon 09:00–15:00 (= UTC Mon 01:00–07:00)
+    // 6h + 6h = 12h. With daily threshold 8h, expect 8h regular + 4h daily_ot.
+    const rules = { ...SG_DEFAULT_RULES, daily_threshold_hours: 8 };
+    const out = classifyHoursForPeriod({
+      clockRecords: [
+        record({
+          id: "r1",
+          user_id: "u1",
+          clocked_in_at: "2026-04-26T16:00:00.000Z",
+          clocked_out_at: "2026-04-26T22:00:00.000Z",
+        }),
+        record({
+          id: "r2",
+          user_id: "u1",
+          clocked_in_at: "2026-04-27T01:00:00.000Z",
+          clocked_out_at: "2026-04-27T07:00:00.000Z",
+        }),
+      ],
+      overtimeRules: rules,
+      holidays: [],
+      restDayResolver: NEVER_REST,
+      timezone: "Asia/Singapore",
+    });
+    const reg = out
+      .filter((c) => c.kind === "regular")
+      .reduce((s, c) => s + c.hours, 0);
+    const dailyOt = out
+      .filter((c) => c.kind === "daily_ot")
+      .reduce((s, c) => s + c.hours, 0);
+    expect(reg).toBe(8);
+    expect(dailyOt).toBe(4);
+  });
+
+  it("weekly threshold totals against venue ISO week (Sunday-night-into-Monday-morning crosses UTC weeks but stays in same SGT week)", () => {
+    // 2026-04-26 is Sunday SGT (rest day if not skipped); we use NEVER_REST
+    // to focus on weekly totals.
+    // r1: SGT Mon 2026-04-27 00:00–08:00 = UTC Sun 2026-04-26 16:00–24:00.
+    //   In SGT-week-starting-2026-04-27 (Mon).
+    // r2..r5: SGT Tue–Fri 8h each, in the SAME week as r1.
+    // Total: 5 × 8h = 40h. No weekly OT (under 44).
+    const records: ClockRecord[] = [];
+    records.push(
+      record({
+        id: "r1",
+        user_id: "u1",
+        clocked_in_at: "2026-04-26T16:00:00.000Z",
+        clocked_out_at: "2026-04-27T00:00:00.000Z",
+      })
+    );
+    for (let day = 0; day < 4; day++) {
+      const d = new Date(Date.UTC(2026, 3, 28 + day))
+        .toISOString()
+        .slice(0, 10);
+      records.push(
+        record({
+          id: `r${day + 2}`,
+          user_id: "u1",
+          clocked_in_at: `${d}T02:00:00Z`,
+          clocked_out_at: `${d}T10:00:00Z`,
+        })
+      );
+    }
+    const out = classifyHoursForPeriod({
+      clockRecords: records,
+      overtimeRules: SG_DEFAULT_RULES,
+      holidays: [],
+      restDayResolver: NEVER_REST,
+      timezone: "Asia/Singapore",
+    });
+    const weekly = out
+      .filter((c) => c.kind === "weekly_ot")
+      .reduce((s, c) => s + c.hours, 0);
+    expect(weekly).toBe(0);
+    // Every record falls in the same SGT week (Mon 2026-04-27 onward).
+    const dates = new Set(out.map((c) => c.date));
+    expect(dates.has("2026-04-27")).toBe(true);
+  });
+
+  it("non-SG timezone flips classification: explicit America/New_York", () => {
+    // 2026-05-10 is a Sunday in UTC and NY (NY is UTC-4 in May).
+    // 2026-05-11 04:30 UTC is Sun 00:30 NY time — still Sunday locally.
+    const out = classifyHoursForPeriod({
+      clockRecords: [
+        record({
+          id: "r1",
+          user_id: "u1",
+          clocked_in_at: "2026-05-11T03:30:00.000Z",
+          clocked_out_at: "2026-05-11T08:30:00.000Z", // 5h
+        }),
+      ],
+      overtimeRules: SG_DEFAULT_RULES,
+      holidays: [],
+      restDayResolver: defaultRestDayResolver(SG_DEFAULT_RULES),
+      timezone: "America/New_York",
+    });
+    expect(out[0].kind).toBe("rest_day");
+    expect(out[0].date).toBe("2026-05-10");
+  });
 });

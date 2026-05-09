@@ -63,6 +63,9 @@ export async function lockRunWithSnapshot(
       run.status = "locked";
       run.locked_at = nowIso();
       run.locked_by = lockerStaffId;
+      // Re-locking after unlock leaves unlocked_by/unlocked_at in place (they
+      // describe the prior unlock event); unlock_note is cleared because the
+      // current state is no longer "unlocked with reason X".
       run.unlock_note = null;
       run.updated_at = nowIso();
       return { success: true };
@@ -117,8 +120,11 @@ export async function unlockRun(
     );
     if (idx >= 0) MOCK_PAYROLL_RECONCILIATION.splice(idx, 1);
     run.status = "review";
-    run.locked_at = null;
-    run.locked_by = unlockerStaffId;
+    // locked_by / locked_at preserved across the unlock so the UI can show
+    // the original locker alongside the current unlocker. The next re-lock
+    // will overwrite them.
+    run.unlocked_by = unlockerStaffId;
+    run.unlocked_at = nowIso();
     run.unlock_note = note;
     run.updated_at = nowIso();
     return { success: true };

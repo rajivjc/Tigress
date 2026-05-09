@@ -37,6 +37,11 @@ interface Props {
   isOwner: boolean;
 }
 
+function formatTs(iso: string | null): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleString();
+}
+
 function fmt(n: number): string {
   return n.toFixed(2);
 }
@@ -64,6 +69,11 @@ export function PayrollRunClient({ run, lineItems, staff, isOwner }: Props) {
     () => new Map(staff.map((s) => [s.id, s.full_name])),
     [staff]
   );
+
+  const lockerName = run.locked_by ? staffMap.get(run.locked_by) ?? null : null;
+  const unlockerName = run.unlocked_by
+    ? staffMap.get(run.unlocked_by) ?? null
+    : null;
 
   const grouped = useMemo(() => {
     const out = new Map<string, PayrollLineItem[]>();
@@ -300,6 +310,38 @@ export function PayrollRunClient({ run, lineItems, staff, isOwner }: Props) {
           </div>
         </div>
       </div>
+
+      {(run.locked_by || run.unlocked_by) && (
+        <div className="space-y-1 rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 text-xs text-zinc-400">
+          {run.locked_by && (
+            <p>
+              Locked by{" "}
+              <span className="text-zinc-200">
+                {lockerName ?? run.locked_by}
+              </span>{" "}
+              on {formatTs(run.locked_at)}
+            </p>
+          )}
+          {isReview && run.unlocked_by && (
+            <p>
+              Last unlocked by{" "}
+              <span className="text-zinc-200">
+                {unlockerName ?? run.unlocked_by}
+              </span>{" "}
+              on {formatTs(run.unlocked_at)}
+              {run.unlock_note && (
+                <>
+                  {" "}
+                  — note:{" "}
+                  <span className="italic text-zinc-300">
+                    &ldquo;{run.unlock_note}&rdquo;
+                  </span>
+                </>
+              )}
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="space-y-4">
         {Array.from(grouped.entries()).map(([staffId, items]) => (
