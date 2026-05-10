@@ -20,8 +20,8 @@ next:
 - `02-after-s13-phase-1-close.md` — Phase 1 declared
   feature-complete. Adds the audit fix-up (S11), UI/UX polish
   (S12), responsive calendar (S13), and Supabase going live in
-  the deployed environment. The README's "Phase 1 feature
-  complete" status line was set in this window.
+  the deployed environment. The README’s “Phase 1 feature
+  complete” status line was set in this window.
 - `03-after-s19-phase-2-tier-2-close.md` — Phase 2 Tier 1–2
   complete. PWA foundation (S14), Web Push notifications (S15),
   no-show tracking (S16), booking reminders cron (S17), daily
@@ -41,31 +41,19 @@ S25–S27b-fix (scheduling foundation through payroll engine
 close-out). When the next phase begins, that file gets archived
 here too.
 
-## Provenance note (Session 28)
-
-Session 28 created this archive directory but **did not have the
-four prior handover files supplied to it at archive time**. The
-files listed above are the *intended* archive — RC will append
-the actual handover documents in a follow-up commit. Until then,
-this README is the placeholder that documents the slot each file
-occupies.
-
-When the priors are added, this paragraph should be removed and
-the README simplified to the "What lives here" section above.
-
 ## Reading these files
 
 A few things to know going in:
 
 - **Header dates are unreliable.** All four prior handovers
-  carry an "April 2026" header line, which is true of only some
+  carry an “April 2026” header line, which is true of only some
   of them. The four were drafted at points spanning several
   weeks. If a date matters, cross-reference `git log` rather
   than trust the header.
 - **Some claims are superseded.** A handover written after S13
   describes the system as it stood after S13. Patterns, table
   shapes, and even some module boundary rules have moved since.
-  When you see "the X module imports Y", treat it as descriptive
+  When you see “the X module imports Y”, treat it as descriptive
   of the moment, not prescriptive for today.
 - **The handovers have value beyond their facts.** They show how
   thinking *evolved* — what was uncertain, what was deferred,

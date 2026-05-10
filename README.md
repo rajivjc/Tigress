@@ -16,6 +16,49 @@ tests passing across 95 suites. Phase boundaries are documented in
 `docs/_handovers/`; the active phase's handover lives in chat
 context until that phase closes.
 
+## Features
+
+### Members
+
+Book any of the 7 pool tables on the live floorplan using monthly
+credits — 1 credit per hour, allocated by tier on each Stripe
+billing cycle, no rollover. Invite other members to a session;
+invitees accept or decline, push notifications fire on both ends.
+Cancel before the session starts to refund credits atomically.
+Browse and post on the social feed (text, YouTube embeds, image
+URLs, likes). Get a push reminder 45–75 minutes before each
+upcoming session. Manage profile, see booking history, install the
+app to home screen for push (iOS 16.4+ required for Web Push).
+
+### Staff
+
+The live floorplan shows real-time table status with a 30-second
+polling fallback. Day and week calendars surface bookings, blocks,
+and no-shows; mark no-shows in the past 48 hours. Record walk-ins
+with guest details and deposit tracking. Member lookup by name,
+email, or phone. Run daily opening and closing checklists
+(materialized lazily per date) and reference the bar recipe book
+(dual search by recipe name or ingredient, category filter). Clock
+in and out with rounding rules; request corrections for missed
+punches. View personal shift schedule, swap directly with another
+staff member, or release a shift to the giveaway marketplace. View
+own payslips with full line-item breakdown.
+
+### Manager and owner
+
+Manager plans the week (copy from last week, validate coverage
+against role requirements, publish to staff with push
+notifications), reviews clock records, approves corrections and
+swap requests, marks excused absences. Manager and owner block
+tables for events, manage checklist templates, curate the recipe
+book, and run competitions: single-elimination tournaments, leagues
+with configurable points and tiebreakers, multi-team galas, and
+promotion/relegation between seasons. Owner configures membership
+tiers, rate cards, holidays, OT rules, payslip branding, and Stripe
+price IDs. Owner runs payroll: draft → review → locked with rate
+resolution, OT classification, line-item aggregation, payslip PDF
+generation, and CSV batch export.
+
 ## Stack
 
 - Next.js 14.2.15 (App Router, Server Actions)
@@ -60,26 +103,9 @@ project.
 
 ## Module map
 
-- **Host application** (`src/app/`, `src/components/`, `src/lib/`) —
-  auth and role resolution, member profiles, table booking with
-  invites and atomic credit RPCs, floorplan and calendar for staff,
-  walk-ins, manager block/unblock, social feed, owner settings, PWA
-  shell, Web Push, Stripe webhooks.
-- **Competitions** (`src/competitions/`) — tournaments
-  (single-elimination), leagues (configurable, with standings
-  engine, schedule generator, multi-team galas, promotion /
-  relegation), polymorphic entrants (member / guest / team).
-  Designed as a lift-out-able product; cross-module imports are
-  gated through three integration files and enforced by a CI
-  boundary test. See `docs/ARCHITECTURE.md` §"Module boundary
-  invariants".
-- **Scheduling and payroll** (`src/scheduling/`,
-  `src/scheduling/payroll/`) — shift templates, FT standing
-  assignments, PT availability, weekly draft / publish flow with
-  coverage gates, clock records, swaps, no-show tracking, payroll
-  runs with rate resolution and OT classification, payslip PDF
-  generation, CSV export. Host-folded — reaches into members /
-  staff / auth freely.
+- **Host** (`src/app/`, `src/components/`, `src/lib/`).
+- **Competitions** (`src/competitions/`) — lift-out-able. See `docs/ARCHITECTURE.md` §"Module boundary invariants".
+- **Scheduling and payroll** (`src/scheduling/`) — host-folded.
 
 ## Documentation
 
