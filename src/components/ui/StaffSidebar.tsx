@@ -36,6 +36,7 @@ const staffLinks: SidebarLink[] = [
   { href: "/staff/availability", label: "Availability", icon: CalendarClock },
   { href: "/staff/clock", label: "Clock", icon: Clock },
   { href: "/staff/swaps", label: "Swaps", icon: ArrowLeftRight },
+  { href: "/staff/payroll", label: "Payslips", icon: DollarSign },
   { href: "/checklists", label: "Checklists", icon: ClipboardCheck },
   { href: "/recipes", label: "Recipes", icon: BookOpen },
   { href: "/competitions", label: "Competitions", icon: Trophy },
@@ -60,6 +61,7 @@ const ownerLinks: SidebarLink[] = [
   { href: "/leagues/divisions", label: "Divisions", icon: Layers },
   { href: "/settings", label: "Settings", icon: Settings },
   { href: "/rates", label: "Rates", icon: DollarSign },
+  { href: "/owner/payroll/settings", label: "Payroll settings", icon: DollarSign },
 ];
 
 export function StaffSidebar() {

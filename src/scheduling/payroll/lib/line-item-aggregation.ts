@@ -208,6 +208,23 @@ export interface BuildLineItemsPerRecordInput {
   baseRates: Map<string, number>;
 }
 
+/**
+ * Aggregated engine line items, one per (staff, classification kind,
+ * rateFingerprint). Multiple clock records that share the same effective
+ * rate AND multiplier set roll up into a single line; records with
+ * differing rates split into separate lines.
+ *
+ * NOTE — `clock_record_id` on the output is a SAMPLE: it carries the id of
+ * one of the records that contributed to the aggregate, not the full set.
+ * This is intentional — line items are summary rows, not a denormalised
+ * audit log. Surfaces that drill down into "which clock records produced
+ * this line" (the staff payslip view does this via the tooltip + clock-
+ * history link) MUST label the link as a sample and explain that the line
+ * aggregates multiple records (S27a-fix-2 Finding 14). The full audit
+ * trail lives in `audit_log` and the underlying clock-record rows.
+ */
+export type BuildLineItemsPerRecordOutput = EngineLineItemDraft[];
+
 /** Stable, order-insensitive fingerprint of the multiplier set so two
  *  records that fired identical multipliers collapse into one line item. */
 function rateFingerprint(

@@ -1,13 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getCurrentStaff, listAllStaff } from "@/lib/data/staff";
+import { getCurrentStaff } from "@/lib/data/staff";
 import { sendPushToStaffMembers } from "@/lib/push/send";
 import { writePayrollAuditLog } from "../audit";
-import {
-  listClockRecordsForUser,
-  listClockRecordsInPeriod,
-} from "../../data/clock-records";
+import { listClockRecordsInPeriod } from "../../data/clock-records";
 import {
   createRun,
   deleteRun as deleteRunRow,
@@ -141,22 +138,19 @@ export async function attestRunForReviewAction(
   }
 
   // Reconciliation: no clock records in period in active or pending_review.
+  // Single batched query via the status-filter param (S27a-fix-2 Finding 13)
+  // — replaces the per-staff loop the original implementation ran.
   const periodStartIso = `${run.period_start}T00:00:00Z`;
   const periodEndExclusiveIso = `${addDays(run.period_end, 1)}T00:00:00Z`;
-  const allStaff = await listAllStaff();
-  let dirty = 0;
-  for (const s of allStaff) {
-    const recs = await listClockRecordsForUser(s.id, 1000);
-    for (const r of recs) {
-      if (r.clocked_in_at < periodStartIso) continue;
-      if (r.clocked_in_at >= periodEndExclusiveIso) continue;
-      if (r.status === "active" || r.status === "pending_review") dirty++;
-    }
-  }
-  if (dirty > 0) {
+  const dirtyRecords = await listClockRecordsInPeriod(
+    periodStartIso,
+    periodEndExclusiveIso,
+    ["active", "pending_review"]
+  );
+  if (dirtyRecords.length > 0) {
     return {
       success: false,
-      error: `Cannot attest: ${dirty} clock record(s) still need review/lock`,
+      error: `Cannot attest: ${dirtyRecords.length} clock record(s) still need review/lock`,
     };
   }
 

@@ -3,6 +3,8 @@ import { formatRunAsCsv } from "@/scheduling/payroll/lib/csv";
 import type {
   PayrollLineItem,
   PayrollRun,
+  PayrollSettings,
+  PayrollVenueBranding,
 } from "@/scheduling/payroll/types";
 
 const FIXED_TS = "2025-01-01T00:00:00.000Z";
@@ -25,6 +27,41 @@ const RUN: PayrollRun = {
   updated_at: FIXED_TS,
 };
 
+const SETTINGS: Pick<PayrollSettings, "currency" | "timezone"> = {
+  currency: "SGD",
+  timezone: "Asia/Singapore",
+};
+
+const BRANDING: PayrollVenueBranding = {
+  id: "brand-1",
+  venue_name: "Tigress",
+  address: "",
+  contact_email: "",
+  contact_phone: "",
+  logo_url: "",
+  created_at: FIXED_TS,
+  updated_at: FIXED_TS,
+};
+
+const EXPORTER = { staffId: "owner-1", name: "Olivia Owner" };
+const EXPORTED_AT = "2026-06-02T09:00:00.000Z";
+
+function csvFor(input: {
+  lineItems: PayrollLineItem[];
+  staff: { id: string; full_name: string }[];
+  run?: PayrollRun;
+}): string {
+  return formatRunAsCsv({
+    run: input.run ?? RUN,
+    lineItems: input.lineItems,
+    staff: input.staff,
+    venueBranding: BRANDING,
+    settings: SETTINGS,
+    exporter: EXPORTER,
+    exportedAt: EXPORTED_AT,
+  });
+}
+
 function li(partial: Partial<PayrollLineItem> & { id: string; staff_id: string; kind: PayrollLineItem["kind"]; amount: number }): PayrollLineItem {
   return {
     id: partial.id,
@@ -46,11 +83,7 @@ function li(partial: Partial<PayrollLineItem> & { id: string; staff_id: string; 
 
 describe("formatRunAsCsv", () => {
   it("returns header-only CSV when there are no line items", () => {
-    const csv = formatRunAsCsv({
-      run: RUN,
-      lineItems: [],
-      staff: [],
-    });
+    const csv = csvFor({ lineItems: [], staff: [] });
     const lines = csv.split("\n");
     expect(lines[0]).toContain("staff_id");
     expect(lines[0]).toContain("net");
@@ -65,8 +98,7 @@ describe("formatRunAsCsv", () => {
       li({ id: "4", staff_id: "u1", kind: "deduction", amount: -25, source: "manual" }),
       li({ id: "5", staff_id: "u2", kind: "hours", amount: 1000, hours: 40, rate_applied: 25 }),
     ];
-    const csv = formatRunAsCsv({
-      run: RUN,
+    const csv = csvFor({
       lineItems: items,
       staff: [
         { id: "u1", full_name: "Alice" },
@@ -85,8 +117,7 @@ describe("formatRunAsCsv", () => {
     const items = [
       li({ id: "1", staff_id: "u1", kind: "hours", amount: 100, hours: 5, rate_applied: 20 }),
     ];
-    const csv = formatRunAsCsv({
-      run: RUN,
+    const csv = csvFor({
       lineItems: items,
       staff: [{ id: "u1", full_name: "Doe, Jane" }],
     });
@@ -99,51 +130,43 @@ describe("formatRunAsCsv", () => {
       li({ id: "2", staff_id: "u1", kind: "deduction", amount: -100, source: "manual" }),
       li({ id: "3", staff_id: "u1", kind: "statutory", amount: -200 }),
     ];
-    const csv = formatRunAsCsv({
-      run: RUN,
-      lineItems: items,
-      staff: [{ id: "u1", full_name: "X" }],
-    });
+    const csv = csvFor({ lineItems: items, staff: [{ id: "u1", full_name: "X" }] });
     const row = csv.split("\n")[1].split(",");
     // gross at index 20, net at 21
     expect(row[row.length - 2]).toBe("1000.00");
     expect(row[row.length - 1]).toBe("700.00");
   });
 
-  it("gross/net are round-of-sum, not sum-of-rounded across many small items (S27a-fix-2 Finding 6)", () => {
-    // Synthesise 100 line items at 0.01 each. Sum-of-rounded == round-of-sum
-    // for 2dp values, but the structural change to use a dedicated
-    // unrounded accumulator means gross is computed once and rounded once.
-    // Verify the published gross matches the round-of-sum value exactly.
-    const items: PayrollLineItem[] = [];
-    for (let i = 0; i < 100; i++) {
-      items.push(
-        li({
-          id: `i${i}`,
-          staff_id: "u1",
-          kind: "hours",
-          amount: 0.01,
-          hours: 0.001,
-          rate_applied: 10,
-        })
-      );
+  it(
+    "gross/net are round-of-sum, not sum-of-rounded — uses inputs that diverge (S27a-fix-2 Finding 12)",
+    () => {
+      // Three items at amount=0.025 each. JS Math.round() rounds half-away-
+      // from-zero: Math.round(2.5) = 3, so an individually-rounded amount
+      // becomes 0.03 each. Sum-of-rounded would give 0.09 for gross. The
+      // transformer accumulates raw and rounds ONCE: Math.round(7.5) = 8,
+      // so round-of-sum gives 0.08. The two paths produce different
+      // outputs at this scale — assert the round-of-sum output.
+      const items: PayrollLineItem[] = [
+        li({ id: "1", staff_id: "u1", kind: "hours", amount: 0.025 }),
+        li({ id: "2", staff_id: "u1", kind: "hours", amount: 0.025 }),
+        li({ id: "3", staff_id: "u1", kind: "hours", amount: 0.025 }),
+      ];
+      const csv = csvFor({
+        lineItems: items,
+        staff: [{ id: "u1", full_name: "X" }],
+      });
+      const header = csv.split("\n")[0].split(",");
+      const row = csv.split("\n")[1].split(",");
+      expect(row[header.indexOf("gross")]).toBe("0.08");
+      expect(row[header.indexOf("net")]).toBe("0.08");
+      // Sanity check the sum-of-rounded path would have produced 0.09.
+      const sumOfRounded =
+        Math.round(0.025 * 100) / 100 +
+        Math.round(0.025 * 100) / 100 +
+        Math.round(0.025 * 100) / 100;
+      expect(sumOfRounded).toBe(0.09);
     }
-    // Plus a deduction so the net path is exercised too.
-    items.push(
-      li({ id: "d1", staff_id: "u1", kind: "deduction", amount: -0.33, source: "manual" })
-    );
-    const csv = formatRunAsCsv({
-      run: RUN,
-      lineItems: items,
-      staff: [{ id: "u1", full_name: "X" }],
-    });
-    const header = csv.split("\n")[0].split(",");
-    const row = csv.split("\n")[1].split(",");
-    // gross = round(100 × 0.01) = 1.00 (positive items only)
-    expect(row[header.indexOf("gross")]).toBe("1.00");
-    // net = round(1.00 + -0.33) = 0.67
-    expect(row[header.indexOf("net")]).toBe("0.67");
-  });
+  );
 
   it("groups daily_ot vs weekly_ot when multipliers map flags", () => {
     const items: PayrollLineItem[] = [
@@ -164,14 +187,11 @@ describe("formatRunAsCsv", () => {
         multipliers: { "ot:weekly_ot": 1.5 },
       }),
     ];
-    const csv = formatRunAsCsv({
-      run: RUN,
+    const csv = csvFor({
       lineItems: items,
       staff: [{ id: "u1", full_name: "X" }],
     });
     const row = csv.split("\n")[1].split(",");
-    // header order has daily_ot_hours,daily_ot_amount,weekly_ot_hours,weekly_ot_amount
-    // Find indices.
     const header = csv.split("\n")[0].split(",");
     expect(row[header.indexOf("daily_ot_amount")]).toBe("100.00");
     expect(row[header.indexOf("weekly_ot_amount")]).toBe("50.00");

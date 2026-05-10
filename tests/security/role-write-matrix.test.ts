@@ -36,7 +36,7 @@ const MANIFEST_PATH = join(
   "role-write-matrix.json"
 );
 
-const ENFORCED_PREFIXES = ["schedule_payroll_"];
+const ENFORCED_PREFIXES = ["schedule_payroll_", "payroll_venue_branding"];
 
 type WriteAction = "INSERT" | "UPDATE" | "DELETE" | "ALL";
 

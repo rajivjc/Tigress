@@ -279,4 +279,58 @@ describe("payroll reconciliation (mock mode)", () => {
     expect(fresh?.unlocked_by).toBe("owner-1"); // prior unlock event
     expect(fresh?.unlock_note).toBeNull(); // cleared on re-lock
   });
+
+  // -------------------------------------------------------------------
+  // S27a-fix-2 Finding 16: mock-mode unlockRun snapshot + rollback
+  // parity with lockRunWithSnapshot. A failed mid-unlock must leave the
+  // reconciliation row intact and restore the run row to its locked
+  // state (not the half-unlocked state where status flipped but the
+  // snapshot delete failed).
+  // -------------------------------------------------------------------
+  it("failed mid-unlock rolls back to the prior locked state, restoring the snapshot row", async () => {
+    const run = await createRun({
+      periodStart: "2026-05-01",
+      periodEnd: "2026-05-31",
+      paymentDate: "2026-06-07",
+    });
+    await setRunStatus(run.run!.id, "review");
+    await lockRunWithSnapshot(
+      {
+        runId: run.run!.id,
+        clockRecords: [],
+        ratesSnapshot: [],
+        overtimeRulesSnapshot: OT_RULES,
+        holidaysSnapshot: HOLIDAYS,
+      },
+      "owner-original"
+    );
+    const beforeUnlock = await getRun(run.run!.id);
+    expect(beforeUnlock?.status).toBe("locked");
+    const reconBefore = await getReconciliation(run.run!.id);
+    expect(reconBefore).not.toBeNull();
+
+    // Inject a throw on the splice path used by unlockRun's mock branch.
+    const spliceSpy = vi
+      .spyOn(MOCK_PAYROLL_RECONCILIATION, "splice")
+      .mockImplementationOnce(() => {
+        throw new Error("simulated DB failure");
+      });
+    try {
+      const r = await unlockRun(run.run!.id, "owner-2", "trying again");
+      expect(r.success).toBe(false);
+      expect(r.error).toMatch(/simulated DB failure/);
+    } finally {
+      spliceSpy.mockRestore();
+    }
+
+    // Run is back to its locked state.
+    const after = await getRun(run.run!.id);
+    expect(after?.status).toBe("locked");
+    expect(after?.unlock_note).toBe(beforeUnlock!.unlock_note);
+    expect(after?.unlocked_by).toBe(beforeUnlock!.unlocked_by);
+    expect(after?.unlocked_at).toBe(beforeUnlock!.unlocked_at);
+    // Reconciliation row survives intact.
+    const reconAfter = await getReconciliation(run.run!.id);
+    expect(reconAfter).not.toBeNull();
+  });
 });

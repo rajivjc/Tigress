@@ -45,6 +45,12 @@
       "writers": {
         "default": ["manager", "owner"]
       }
+    },
+    {
+      "table": "payroll_venue_branding",
+      "writers": {
+        "default": ["owner"]
+      }
     }
   ]
 }

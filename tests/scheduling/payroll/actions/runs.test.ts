@@ -9,6 +9,7 @@ import {
   unlockRunAction,
 } from "@/scheduling/payroll/actions/runs";
 import { __resetMockPayroll } from "@/scheduling/payroll/data/mock-data";
+import { MOCK_SCHEDULE_CLOCK_RECORDS } from "@/scheduling/data/mock-data";
 import { getRun, setRunStatus } from "@/scheduling/payroll/data/runs";
 import {
   addLineItem,
@@ -115,6 +116,81 @@ describe("attestRunForReviewAction authz + transition", () => {
     expect(r.success).toBe(false);
     expect(r.error).toMatch(/not in draft/i);
   });
+
+  // -------------------------------------------------------------------
+  // S27a-fix-2 Finding 13: attest detects ACTIVE + PENDING_REVIEW clock
+  // records via the new listClockRecordsInPeriod status-filter param,
+  // not the per-staff loop the original code ran.
+  // -------------------------------------------------------------------
+  it("blocks attest when an in-period clock record is still active", async () => {
+    const runId = await createDraftRun();
+    MOCK_SCHEDULE_CLOCK_RECORDS.push({
+      id: "clk-active-1",
+      shift_id: "shift-x",
+      user_id: "mock-staff-row-1",
+      // Mid-period.
+      clocked_in_at: "2026-04-15T10:00:00Z",
+      clocked_out_at: null,
+      status: "active",
+      locked_at: null,
+      locked_by: null,
+      unlock_note: null,
+      manager_edited: false,
+      manager_edit_note: null,
+      created_at: "2026-04-15T10:00:00Z",
+      updated_at: "2026-04-15T10:00:00Z",
+    });
+    signInAs("mock-manager-1");
+    const r = await attestRunForReviewAction(runId);
+    expect(r.success).toBe(false);
+    expect(r.error).toMatch(/clock record/i);
+  });
+
+  it("blocks attest when an in-period clock record is still pending_review", async () => {
+    const runId = await createDraftRun();
+    MOCK_SCHEDULE_CLOCK_RECORDS.push({
+      id: "clk-pending-1",
+      shift_id: "shift-y",
+      user_id: "mock-staff-row-2",
+      clocked_in_at: "2026-04-20T10:00:00Z",
+      clocked_out_at: "2026-04-20T18:00:00Z",
+      status: "pending_review",
+      locked_at: null,
+      locked_by: null,
+      unlock_note: null,
+      manager_edited: false,
+      manager_edit_note: null,
+      created_at: "2026-04-20T10:00:00Z",
+      updated_at: "2026-04-20T18:00:00Z",
+    });
+    signInAs("mock-manager-1");
+    const r = await attestRunForReviewAction(runId);
+    expect(r.success).toBe(false);
+    expect(r.error).toMatch(/clock record/i);
+  });
+
+  it("ignores clock records outside the period window", async () => {
+    const runId = await createDraftRun();
+    // Before-period active record — should NOT block attest.
+    MOCK_SCHEDULE_CLOCK_RECORDS.push({
+      id: "clk-before-1",
+      shift_id: "shift-z",
+      user_id: "mock-staff-row-1",
+      clocked_in_at: "2026-03-15T10:00:00Z",
+      clocked_out_at: null,
+      status: "active",
+      locked_at: null,
+      locked_by: null,
+      unlock_note: null,
+      manager_edited: false,
+      manager_edit_note: null,
+      created_at: "2026-03-15T10:00:00Z",
+      updated_at: "2026-03-15T10:00:00Z",
+    });
+    signInAs("mock-manager-1");
+    const r = await attestRunForReviewAction(runId);
+    expect(r.success).toBe(true);
+  });
 });
 
 describe("unattestRunAction authz + transition", () => {
@@ -194,6 +270,58 @@ describe("lockRunAction owner-only enforcement", () => {
     await lockRunAction(runId);
     const recon = await getReconciliation(runId);
     expect(recon).not.toBeNull();
+  });
+
+  // -------------------------------------------------------------------
+  // S27a-fix-2 Finding 13 regression: the lock-snapshot path must keep
+  // filtering to LOCKED clock records via the listClockRecordsInPeriod
+  // default param. Stage one locked record + one pending_review record;
+  // assert only the locked one is captured in the snapshot.
+  // -------------------------------------------------------------------
+  it("lock snapshot only captures LOCKED clock records (default status filter)", async () => {
+    const runId = await createDraftRun();
+    MOCK_SCHEDULE_CLOCK_RECORDS.push({
+      id: "clk-locked-in-period",
+      shift_id: "shift-a",
+      user_id: "mock-staff-row-1",
+      clocked_in_at: "2026-04-10T10:00:00Z",
+      clocked_out_at: "2026-04-10T18:00:00Z",
+      status: "locked",
+      locked_at: "2026-04-10T19:00:00Z",
+      locked_by: "mock-staff-row-3",
+      unlock_note: null,
+      manager_edited: false,
+      manager_edit_note: null,
+      created_at: "2026-04-10T10:00:00Z",
+      updated_at: "2026-04-10T19:00:00Z",
+    });
+    // pending_review record in-period — must NOT appear in the snapshot
+    // even though attest blocks earlier; we lock the run via the data
+    // layer to bypass attest's reconciliation guard for this assertion.
+    MOCK_SCHEDULE_CLOCK_RECORDS.push({
+      id: "clk-pending-in-period",
+      shift_id: "shift-b",
+      user_id: "mock-staff-row-1",
+      clocked_in_at: "2026-04-12T10:00:00Z",
+      clocked_out_at: "2026-04-12T18:00:00Z",
+      status: "pending_review",
+      locked_at: null,
+      locked_by: null,
+      unlock_note: null,
+      manager_edited: false,
+      manager_edit_note: null,
+      created_at: "2026-04-12T10:00:00Z",
+      updated_at: "2026-04-12T18:00:00Z",
+    });
+    // Move directly to review via data layer (skip attest's guard).
+    await setRunStatus(runId, "review");
+    signInAs("mock-owner-1");
+    const r = await lockRunAction(runId);
+    expect(r.success).toBe(true);
+    const recon = await getReconciliation(runId);
+    expect(recon).not.toBeNull();
+    const captured = (recon!.clock_records as Array<{ id: string }>);
+    expect(captured.map((c) => c.id)).toEqual(["clk-locked-in-period"]);
   });
 
   it("emits payroll.run.locked exactly once", async () => {

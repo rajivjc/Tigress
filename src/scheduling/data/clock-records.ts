@@ -90,19 +90,26 @@ export async function listClockRecordsForShifts(
 }
 
 /**
- * Returns every locked clock record whose `clocked_in_at` falls within
- * `[periodStartIso, periodEndExclusiveIso)`. The payroll engine and the
- * lock-snapshot path both consume this — replaces the per-staff loop both
- * sites used to run.
+ * Returns every clock record matching `statusFilter` whose `clocked_in_at`
+ * falls within `[periodStartIso, periodEndExclusiveIso)`. The payroll
+ * engine and the lock-snapshot path both consume this with the default
+ * `'locked'` filter; the attest-for-review reconciliation passes
+ * `['active', 'pending_review']` to surface clock records that still need
+ * lock-down before the run can leave draft (S27a-fix-2 Finding 13).
+ *
+ * The default of `'locked'` preserves backward compatibility — every
+ * pre-S27b call site continues to behave identically.
  */
 export async function listClockRecordsInPeriod(
   periodStartIso: string,
-  periodEndExclusiveIso: string
+  periodEndExclusiveIso: string,
+  statusFilter: ClockRecordStatus | ClockRecordStatus[] = "locked"
 ): Promise<ClockRecord[]> {
+  const filterList = Array.isArray(statusFilter) ? statusFilter : [statusFilter];
   if (!isSupabaseConfigured()) {
     return MOCK_SCHEDULE_CLOCK_RECORDS.filter(
       (r) =>
-        r.status === "locked" &&
+        filterList.includes(r.status) &&
         r.clocked_in_at >= periodStartIso &&
         r.clocked_in_at < periodEndExclusiveIso
     )
@@ -110,13 +117,17 @@ export async function listClockRecordsInPeriod(
       .sort((a, b) => a.clocked_in_at.localeCompare(b.clocked_in_at));
   }
   const supabase = createClient();
-  const { data } = await supabase
+  let query = supabase
     .from("schedule_clock_records")
     .select("*")
-    .eq("status", "locked")
     .gte("clocked_in_at", periodStartIso)
-    .lt("clocked_in_at", periodEndExclusiveIso)
-    .order("clocked_in_at", { ascending: true });
+    .lt("clocked_in_at", periodEndExclusiveIso);
+  if (filterList.length === 1) {
+    query = query.eq("status", filterList[0]);
+  } else {
+    query = query.in("status", filterList);
+  }
+  const { data } = await query.order("clocked_in_at", { ascending: true });
   return (data as ClockRecord[] | null) ?? [];
 }
 

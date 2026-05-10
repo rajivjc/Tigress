@@ -116,6 +116,12 @@ export async function lockRunWithSnapshot(
 /**
  * Unlock the run: deletes the reconciliation snapshot and transitions to
  * review. Required note enforced by the RPC; mock mode validates inline.
+ *
+ * Mock mode mirrors `lockRunWithSnapshot`'s snapshot + throw-rollback
+ * pattern (S27a-fix-2 Finding 16). A failed mid-unlock leaves the
+ * reconciliation row intact and restores the run row to its pre-call
+ * state (status, unlock metadata, updated_at) so the lock cycle isn't
+ * silently wiped to a half-state.
  */
 export async function unlockRun(
   runId: string,
@@ -134,16 +140,48 @@ export async function unlockRun(
     const idx = MOCK_PAYROLL_RECONCILIATION.findIndex(
       (r) => r.run_id === runId
     );
-    if (idx >= 0) MOCK_PAYROLL_RECONCILIATION.splice(idx, 1);
-    run.status = "review";
-    // locked_by / locked_at preserved across the unlock so the UI can show
-    // the original locker alongside the current unlocker. The next re-lock
-    // will overwrite them.
-    run.unlocked_by = unlockerStaffId;
-    run.unlocked_at = nowIso();
-    run.unlock_note = note;
-    run.updated_at = nowIso();
-    return { success: true };
+    // Snapshot pre-call state for rollback parity with lockRunWithSnapshot.
+    const reconSnapshot =
+      idx >= 0 ? { ...MOCK_PAYROLL_RECONCILIATION[idx] } : null;
+    const runSnapshot = {
+      status: run.status,
+      unlocked_at: run.unlocked_at,
+      unlocked_by: run.unlocked_by,
+      unlock_note: run.unlock_note,
+      updated_at: run.updated_at,
+    };
+    try {
+      if (idx >= 0) MOCK_PAYROLL_RECONCILIATION.splice(idx, 1);
+      run.status = "review";
+      // locked_by / locked_at preserved across the unlock so the UI can show
+      // the original locker alongside the current unlocker. The next re-lock
+      // will overwrite them.
+      run.unlocked_by = unlockerStaffId;
+      run.unlocked_at = nowIso();
+      run.unlock_note = note;
+      run.updated_at = nowIso();
+      return { success: true };
+    } catch (err) {
+      // Rollback to the snapshotted pre-call state. Idempotent re-insert:
+      // only put the snapshot back if the row is genuinely gone — if the
+      // splice itself threw, the row is still in the array and a second
+      // splice would create a duplicate.
+      if (
+        reconSnapshot &&
+        !MOCK_PAYROLL_RECONCILIATION.some((r) => r.run_id === runId)
+      ) {
+        MOCK_PAYROLL_RECONCILIATION.splice(idx, 0, reconSnapshot);
+      }
+      run.status = runSnapshot.status;
+      run.unlocked_at = runSnapshot.unlocked_at;
+      run.unlocked_by = runSnapshot.unlocked_by;
+      run.unlock_note = runSnapshot.unlock_note;
+      run.updated_at = runSnapshot.updated_at;
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : "Unlock failed",
+      };
+    }
   }
   const supabase = createClient();
   const { error } = await supabase.rpc("schedule_payroll_unlock_run", {
