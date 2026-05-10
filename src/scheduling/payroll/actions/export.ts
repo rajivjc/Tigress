@@ -4,8 +4,8 @@ import JSZip from "jszip";
 import { getCurrentStaff, listAllStaff } from "@/lib/data/staff";
 import { writePayrollAuditLog } from "../audit";
 import { getBranding } from "../data/branding";
-import { listLineItemsForRun } from "../data/line-items";
-import { getRun, setRunExported } from "../data/runs";
+import { listLineItemsForRun, listLineItemsForRuns } from "../data/line-items";
+import { getRun, listRuns, setRunExported } from "../data/runs";
 import { getSettings } from "../data/settings";
 import { formatRunAsCsv } from "../lib/csv";
 import {
@@ -15,6 +15,7 @@ import {
   type PayslipDocument,
 } from "../lib/payslip-transformer";
 import { renderPayslipPdf } from "../lib/payslip-pdf";
+import type { PayrollLineItem, PayrollRun } from "../types";
 
 function isManager(role: string): boolean {
   return role === "manager" || role === "owner";
@@ -143,7 +144,7 @@ export async function exportRunPdfAction(
   staffId?: string
 ): Promise<{
   success: boolean;
-  pdfBase64?: string;
+  data?: string;
   filename?: string;
   contentType?: string;
   error?: string;
@@ -173,7 +174,7 @@ export async function exportRunPdfAction(
     );
     return {
       success: true,
-      pdfBase64: buffer.toString("base64"),
+      data: buffer.toString("base64"),
       filename: `${ctx.filenameBase}-${safeName}.pdf`,
       contentType: "application/pdf",
     };
@@ -200,7 +201,7 @@ export async function exportRunPdfAction(
   );
   return {
     success: true,
-    pdfBase64: zipBuffer.toString("base64"),
+    data: zipBuffer.toString("base64"),
     filename: `${ctx.filenameBase}-payslips.zip`,
     contentType: "application/zip",
   };
@@ -264,4 +265,87 @@ export async function getStaffPayslipAction(input: {
     return { success: false, error: "No payslip available for this staff" };
   }
   return { success: true, doc: filtered };
+}
+
+// =============================================================================
+// Staff-side payslip listing summary (S27b-fix Finding 18)
+// =============================================================================
+
+export interface StaffPayslipSummary {
+  run: PayrollRun;
+  hasItems: boolean;
+  gross: number;
+  net: number;
+  currency: string;
+}
+
+/**
+ * Returns one summary row per locked run for the requested staff. Uses the
+ * payslip transformer for gross/net so the listing matches the detail page
+ * exactly (S27b-fix Finding 18 — listing's positive-amount filter diverged
+ * from the transformer's kind-exclusion definition for negative bonus
+ * clawbacks). A single batched fetch keeps this O(1) DB calls regardless
+ * of run count.
+ */
+export async function getStaffPayslipsSummaryAction(input?: {
+  staffId?: string;
+}): Promise<{
+  success: boolean;
+  summaries?: StaffPayslipSummary[];
+  error?: string;
+}> {
+  const current = await getCurrentStaff();
+  if (!current) return { success: false, error: "Not signed in" };
+  if (!isStaff(current.role)) {
+    return { success: false, error: "Staff role required" };
+  }
+  const targetStaffId = input?.staffId ?? current.staff.id;
+  if (targetStaffId !== current.staff.id && !isManager(current.role)) {
+    return { success: false, error: "Cannot view another staff's payslips" };
+  }
+
+  const [runs, allStaff, branding, settings] = await Promise.all([
+    listRuns(),
+    listAllStaff(),
+    getBranding(),
+    getSettings(),
+  ]);
+  const lockedRuns = runs.filter((r) => r.status === "locked");
+  if (lockedRuns.length === 0) {
+    return { success: true, summaries: [] };
+  }
+  if (!branding) return { success: false, error: "Venue branding not configured" };
+  if (!settings) return { success: false, error: "Payroll settings not configured" };
+
+  const allItems = await listLineItemsForRuns(lockedRuns.map((r) => r.id));
+  const byRun = new Map<string, PayrollLineItem[]>();
+  for (const it of allItems) {
+    const arr = byRun.get(it.run_id);
+    if (arr) arr.push(it);
+    else byRun.set(it.run_id, [it]);
+  }
+
+  const staffMin = allStaff.map((s) => ({ id: s.id, full_name: s.full_name }));
+  const summaries: StaffPayslipSummary[] = [];
+  for (const run of lockedRuns) {
+    const items = byRun.get(run.id) ?? [];
+    const doc = buildPayslipDocument({
+      run,
+      lineItems: items,
+      staff: staffMin,
+      venueBranding: branding,
+      settings,
+      exporter: { staffId: current.staff.id, name: current.staff.full_name },
+    });
+    const filtered = filterPayslipToStaff(doc, targetStaffId);
+    if (filtered.staff.length === 0) continue;
+    summaries.push({
+      run,
+      hasItems: true,
+      gross: filtered.staff[0].totals.gross,
+      net: filtered.staff[0].totals.net,
+      currency: settings.currency,
+    });
+  }
+  return { success: true, summaries };
 }

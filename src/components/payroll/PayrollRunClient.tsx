@@ -294,10 +294,10 @@ export function PayrollRunClient({ run, lineItems, staff, isOwner }: Props) {
               onClick={() =>
                 run_(async () => {
                   const r = await exportRunPdfAction(run.id);
-                  if (!r.success || !r.pdfBase64 || !r.filename || !r.contentType) {
+                  if (!r.success || !r.data || !r.filename || !r.contentType) {
                     throw new Error(r.error ?? "Export failed");
                   }
-                  downloadBase64(r.filename, r.pdfBase64, r.contentType);
+                  downloadBase64(r.filename, r.data, r.contentType);
                 })
               }
               className="rounded bg-rose-600 px-3 py-1.5 text-sm text-white hover:bg-rose-500"
@@ -468,10 +468,10 @@ function StaffSection({
                   setError(null);
                   try {
                     const r = await exportRunPdfAction(runId, staffId);
-                    if (!r.success || !r.pdfBase64 || !r.filename || !r.contentType) {
+                    if (!r.success || !r.data || !r.filename || !r.contentType) {
                       throw new Error(r.error ?? "Export failed");
                     }
-                    downloadBase64(r.filename, r.pdfBase64, r.contentType);
+                    downloadBase64(r.filename, r.data, r.contentType);
                   } catch (err) {
                     setError(err instanceof Error ? err.message : "Failed");
                   }

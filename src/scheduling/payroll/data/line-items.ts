@@ -33,6 +33,29 @@ export async function listLineItemsForRun(
   return (data as PayrollLineItem[] | null) ?? [];
 }
 
+/**
+ * Batched variant of listLineItemsForRun. Returns every line item belonging
+ * to any of the given run ids in a single round-trip. Used by the staff
+ * payslip listing so it stays O(1) DB calls regardless of run count
+ * (S27b-fix Finding 18).
+ */
+export async function listLineItemsForRuns(
+  runIds: string[]
+): Promise<PayrollLineItem[]> {
+  if (runIds.length === 0) return [];
+  if (!isSupabaseConfigured()) {
+    const set = new Set(runIds);
+    return MOCK_PAYROLL_LINE_ITEMS.filter((i) => set.has(i.run_id)).slice();
+  }
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("schedule_payroll_line_items")
+    .select("*")
+    .in("run_id", runIds)
+    .order("run_id", { ascending: true });
+  return (data as PayrollLineItem[] | null) ?? [];
+}
+
 export async function getLineItem(
   itemId: string
 ): Promise<PayrollLineItem | null> {

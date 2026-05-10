@@ -805,6 +805,68 @@ use `public.get_staff_role() IN ('manager', 'owner')` are fine — the
 check passes when *any* `get_staff_role()` reference appears in the
 clause.
 
+## Testing patterns
+
+### Writing throw-injection atomicity tests
+
+When testing rollback semantics in mock-mode functions that mutate
+multiple objects, the throw must fire AFTER at least one mutation has
+succeeded — otherwise the rollback path isn't engaged and the test
+passes whether or not the rollback is correct.
+
+**Anti-pattern:** `vi.spyOn(arr, "splice").mockImplementationOnce(throw)`
+when the splice is the FIRST mutation. The splice never executes, no
+rollback is needed, and the test passes regardless of whether the
+rollback code is present, broken, or even commented out.
+
+**Pattern that works (Proxy on the mutation target):** identify the
+specific mutation that should succeed (e.g. the splice that removes a
+row) and the specific subsequent mutation that should fail (e.g. an
+assignment to `run.unlocked_at`). Wrap the target object so the throw
+fires on the latter, AFTER the former has executed. The rollback path
+is then genuinely engaged.
+
+```ts
+const findSpy = vi.spyOn(MOCK_TABLE, "find");
+let proxyApplied = false;
+let firstWriteFailed = false;
+findSpy.mockImplementation(function (this: unknown, ...args: unknown[]) {
+  const result = Array.prototype.find.apply(
+    MOCK_TABLE,
+    args as Parameters<typeof Array.prototype.find>
+  );
+  if (!result || proxyApplied) return result;
+  proxyApplied = true;
+  return new Proxy(result, {
+    set(target, key, value) {
+      if (key === "<the_field_to_fail_on>" && !firstWriteFailed) {
+        // Throw only on the first attempt — subsequent assignments are
+        // part of the rollback path and must be allowed through so the
+        // snapshot restore actually lands.
+        firstWriteFailed = true;
+        throw new Error("simulated DB failure");
+      }
+      return Reflect.set(target, key, value);
+    },
+  });
+});
+```
+
+The `firstWriteFailed` guard matters: the rollback itself writes to the
+same field to restore the snapshot, and re-throwing on that write would
+either kill the rollback or surface a different error than the test
+asserts.
+
+**Verification discipline:** every atomicity test must be paired with a
+deliberate-violation step in the commit message — comment out the
+rollback, run the test, assert it fails. If the test still passes, the
+injection point is wrong.
+
+Three prior sessions (S27a Finding 4, S27a-fix-2 Finding 12, S27b
+Finding 17) shipped atomicity tests that didn't actually exercise their
+rollback paths because the throw fired on the first mutation. The
+Proxy-on-mutation-target pattern above is the canonical fix.
+
 ## Payroll engine (Session 27a)
 
 Payroll lives in `src/scheduling/payroll/` as a subpackage of the
