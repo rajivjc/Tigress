@@ -4,6 +4,7 @@ import {
   exportRunJsonAction,
   exportRunPdfAction,
   getStaffPayslipAction,
+  getStaffPayslipsSummaryAction,
 } from "@/scheduling/payroll/actions/export";
 import {
   attestRunForReviewAction,
@@ -282,11 +283,11 @@ describe("exportRunPdfAction", () => {
     signInAs("mock-manager-1");
     const r = await exportRunPdfAction(runId, "mock-staff-row-1");
     expect(r.success).toBe(true);
-    expect(r.pdfBase64).toBeDefined();
+    expect(r.data).toBeDefined();
     expect(r.contentType).toBe("application/pdf");
     expect(r.filename).toContain("Sam_Staff");
     // Base64 of a PDF starts with "JVBERi0" (the encoding of "%PDF-").
-    expect(r.pdfBase64!.startsWith("JVBERi0")).toBe(true);
+    expect(r.data!.startsWith("JVBERi0")).toBe(true);
   }, 20000);
 
   it("rejects single-staff PDF when the staff has no line items in the run", async () => {
@@ -305,7 +306,7 @@ describe("exportRunPdfAction", () => {
     expect(r.contentType).toBe("application/zip");
     expect(r.filename).toContain("payslips.zip");
     // Base64 of a ZIP starts with "UEsD" (encoding of PK\x03\x04).
-    expect(r.pdfBase64!.startsWith("UEsD")).toBe(true);
+    expect(r.data!.startsWith("UEsD")).toBe(true);
   }, 30000);
 
   it("emits payroll.run.exported with format=pdf for single", async () => {
@@ -400,5 +401,186 @@ describe("getStaffPayslipAction", () => {
     const r = await getStaffPayslipAction({ runId });
     expect(r.success).toBe(false);
     expect(r.error).toMatch(/not yet finalised/i);
+  });
+});
+
+// =============================================================================
+// getStaffPayslipsSummaryAction (S27b-fix Finding 18)
+// =============================================================================
+
+describe("getStaffPayslipsSummaryAction", () => {
+  it("returns empty array when there are no locked runs", async () => {
+    signInAs("mock-staff-1");
+    const r = await getStaffPayslipsSummaryAction();
+    expect(r.success).toBe(true);
+    expect(r.summaries).toEqual([]);
+  });
+
+  it("excludes runs with no line items for the staff", async () => {
+    // Locked run that only has line items for staff-row-1 + staff-row-2.
+    // mock-pt-1 (staff-row-4) has no items in this run.
+    await lockedRunWithItems();
+    signInAs("mock-pt-1");
+    const r = await getStaffPayslipsSummaryAction();
+    expect(r.success).toBe(true);
+    expect(r.summaries).toEqual([]);
+  });
+
+  it("staff sees their own summary (gross + net match transformer)", async () => {
+    const runId = await lockedRunWithItems();
+    signInAs("mock-staff-1");
+    const summary = await getStaffPayslipsSummaryAction();
+    expect(summary.success).toBe(true);
+    expect(summary.summaries).toHaveLength(1);
+    expect(summary.summaries![0].run.id).toBe(runId);
+    expect(summary.summaries![0].hasItems).toBe(true);
+
+    // Cross-check against the detail action (which also runs through the
+    // transformer). Listing must match detail exactly.
+    const detail = await getStaffPayslipAction({ runId });
+    expect(detail.success).toBe(true);
+    expect(summary.summaries![0].gross).toBe(
+      detail.doc!.staff[0].totals.gross
+    );
+    expect(summary.summaries![0].net).toBe(detail.doc!.staff[0].totals.net);
+    expect(summary.summaries![0].currency).toBe("SGD");
+  });
+
+  it("listing gross matches detail gross when a negative bonus clawback is present", async () => {
+    // The old inline gross logic on the page used a positive-amount filter,
+    // which would EXCLUDE a negative-amount `bonus` clawback from gross —
+    // diverging from the transformer's kind-exclusion definition (only
+    // deduction + statutory are excluded from gross). Confirm both match.
+    const runId = await createDraftRun();
+    signInAs("mock-manager-1");
+    await addLineItem({
+      runId,
+      staffId: "mock-staff-row-1",
+      kind: "hours",
+      label: "Regular hours",
+      amount: 320,
+      hours: 40,
+      rateApplied: 8,
+      source: "engine",
+      notes: null,
+    });
+    await addLineItem({
+      runId,
+      staffId: "mock-staff-row-1",
+      kind: "bonus",
+      label: "Bonus clawback",
+      amount: -50,
+      source: "manual",
+      notes: null,
+    });
+    await attestRunForReviewAction(runId);
+    signInAs("mock-owner-1");
+    await lockRunAction(runId);
+
+    signInAs("mock-staff-1");
+    const summary = await getStaffPayslipsSummaryAction();
+    expect(summary.success).toBe(true);
+    expect(summary.summaries).toHaveLength(1);
+
+    const detail = await getStaffPayslipAction({ runId });
+    expect(detail.success).toBe(true);
+    // Transformer's gross = 320 (hours) + (-50) (bonus) = 270.
+    // Old listing (positive-amount filter) would have produced 320.
+    expect(detail.doc!.staff[0].totals.gross).toBe(270);
+    expect(summary.summaries![0].gross).toBe(detail.doc!.staff[0].totals.gross);
+    expect(summary.summaries![0].net).toBe(detail.doc!.staff[0].totals.net);
+  });
+
+  it("staff cannot view another staff's summaries", async () => {
+    await lockedRunWithItems();
+    signInAs("mock-staff-1");
+    const r = await getStaffPayslipsSummaryAction({
+      staffId: "mock-staff-row-2",
+    });
+    expect(r.success).toBe(false);
+    expect(r.error).toMatch(/cannot view another staff/i);
+  });
+
+  it("manager can view any staff's summaries via staffId param", async () => {
+    const runId = await lockedRunWithItems();
+    signInAs("mock-manager-1");
+    const r = await getStaffPayslipsSummaryAction({
+      staffId: "mock-staff-row-2",
+    });
+    expect(r.success).toBe(true);
+    expect(r.summaries).toHaveLength(1);
+    expect(r.summaries![0].run.id).toBe(runId);
+  });
+
+  it("rejects unauthenticated callers", async () => {
+    signInAs(null);
+    const r = await getStaffPayslipsSummaryAction();
+    expect(r.success).toBe(false);
+    expect(r.error).toMatch(/not signed in/i);
+  });
+
+  // -------------------------------------------------------------------
+  // N+1 regression guard. The action MUST batch via listLineItemsForRuns;
+  // it must NOT call the per-run listLineItemsForRun in a loop. Future
+  // maintainers can't accidentally regress without breaking this test.
+  // -------------------------------------------------------------------
+  it("uses one batched fetch — never calls the per-run listLineItemsForRun", async () => {
+    // Lock multiple runs so a per-run loop would be visibly N>1.
+    const runIdA = await createDraftRun();
+    signInAs("mock-manager-1");
+    await addLineItem({
+      runId: runIdA,
+      staffId: "mock-staff-row-1",
+      kind: "hours",
+      label: "Regular hours",
+      amount: 100,
+      hours: 10,
+      rateApplied: 10,
+      source: "engine",
+      notes: null,
+    });
+    await attestRunForReviewAction(runIdA);
+    signInAs("mock-owner-1");
+    await lockRunAction(runIdA);
+
+    signInAs("mock-manager-1");
+    const r2 = await createRunAction({
+      periodStart: "2026-05-01",
+      periodEnd: "2026-05-31",
+    });
+    const runIdB = r2.runId!;
+    await addLineItem({
+      runId: runIdB,
+      staffId: "mock-staff-row-1",
+      kind: "hours",
+      label: "Regular hours",
+      amount: 200,
+      hours: 20,
+      rateApplied: 10,
+      source: "engine",
+      notes: null,
+    });
+    await attestRunForReviewAction(runIdB);
+    signInAs("mock-owner-1");
+    await lockRunAction(runIdB);
+
+    const lineItemsModule = await import(
+      "@/scheduling/payroll/data/line-items"
+    );
+    const perRunSpy = vi.spyOn(lineItemsModule, "listLineItemsForRun");
+    const batchedSpy = vi.spyOn(lineItemsModule, "listLineItemsForRuns");
+
+    signInAs("mock-staff-1");
+    const r = await getStaffPayslipsSummaryAction();
+    expect(r.success).toBe(true);
+    expect(r.summaries).toHaveLength(2);
+
+    // Per-run fetcher must NOT be called by the summary action.
+    expect(perRunSpy).not.toHaveBeenCalled();
+    // Batched fetcher must be called exactly once.
+    expect(batchedSpy).toHaveBeenCalledTimes(1);
+
+    perRunSpy.mockRestore();
+    batchedSpy.mockRestore();
   });
 });

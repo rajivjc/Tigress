@@ -53,10 +53,10 @@ export function StaffPayslipClient({ doc, runId }: Props) {
               setError(null);
               try {
                 const r = await exportRunPdfAction(runId, section.staff_id);
-                if (!r.success || !r.pdfBase64 || !r.filename || !r.contentType) {
+                if (!r.success || !r.data || !r.filename || !r.contentType) {
                   throw new Error(r.error ?? "Download failed");
                 }
-                downloadBase64(r.filename, r.pdfBase64, r.contentType);
+                downloadBase64(r.filename, r.data, r.contentType);
               } catch (err) {
                 setError(err instanceof Error ? err.message : "Failed");
               }

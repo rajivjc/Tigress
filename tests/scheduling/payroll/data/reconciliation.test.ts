@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   MOCK_PAYROLL_RECONCILIATION,
+  MOCK_PAYROLL_RUNS,
   __resetMockPayroll,
 } from "@/scheduling/payroll/data/mock-data";
 import {
@@ -281,13 +282,28 @@ describe("payroll reconciliation (mock mode)", () => {
   });
 
   // -------------------------------------------------------------------
-  // S27a-fix-2 Finding 16: mock-mode unlockRun snapshot + rollback
-  // parity with lockRunWithSnapshot. A failed mid-unlock must leave the
-  // reconciliation row intact and restore the run row to its locked
-  // state (not the half-unlocked state where status flipped but the
-  // snapshot delete failed).
+  // S27a-fix-2 Finding 16 / S27b-fix Finding 17: mock-mode unlockRun
+  // snapshot + rollback parity with lockRunWithSnapshot.
+  //
+  // Two distinct failure shapes:
+  //
+  //   1. Splice itself throws — recon row never leaves the array, no
+  //      run-row mutation has happened yet. We expect the call to
+  //      surface the error; rollback is mostly a no-op. (Original
+  //      Finding 16 test, retained but renamed.)
+  //
+  //   2. Splice succeeds, but a subsequent run-row write fails. This is
+  //      the path that genuinely engages the rollback: the recon row is
+  //      already gone AND the run-row is mid-mutation. The rollback
+  //      MUST (a) re-insert the recon row and (b) restore the run-row
+  //      to its prior locked state.
+  //
+  // Pattern for case 2 is Proxy-on-mutation-target — wrap the run row
+  // returned by `find` so an assignment to `unlocked_at` throws AFTER
+  // the splice has already executed (S27b-fix Finding 17 — see
+  // CLAUDE.md "Writing throw-injection atomicity tests").
   // -------------------------------------------------------------------
-  it("failed mid-unlock rolls back to the prior locked state, restoring the snapshot row", async () => {
+  it("reports failure when reconciliation splice itself fails (recon row stays put, no rollback needed)", async () => {
     const run = await createRun({
       periodStart: "2026-05-01",
       periodEnd: "2026-05-31",
@@ -309,7 +325,10 @@ describe("payroll reconciliation (mock mode)", () => {
     const reconBefore = await getReconciliation(run.run!.id);
     expect(reconBefore).not.toBeNull();
 
-    // Inject a throw on the splice path used by unlockRun's mock branch.
+    // Inject a throw on the splice path. The splice never executes, so
+    // the recon row stays in the array. We're verifying the call
+    // surfaces the failure; the rollback path is reached but is a
+    // no-op (nothing to undo).
     const spliceSpy = vi
       .spyOn(MOCK_PAYROLL_RECONCILIATION, "splice")
       .mockImplementationOnce(() => {
@@ -323,13 +342,88 @@ describe("payroll reconciliation (mock mode)", () => {
       spliceSpy.mockRestore();
     }
 
-    // Run is back to its locked state.
+    // Recon row survives intact (splice never executed).
+    const reconAfter = await getReconciliation(run.run!.id);
+    expect(reconAfter).not.toBeNull();
+    // Run is unchanged from its locked state.
+    const after = await getRun(run.run!.id);
+    expect(after?.status).toBe("locked");
+  });
+
+  it("rolls back BOTH the splice AND the run mutation when run-row write fails (Proxy mutation-target injection)", async () => {
+    const run = await createRun({
+      periodStart: "2026-05-01",
+      periodEnd: "2026-05-31",
+      paymentDate: "2026-06-07",
+    });
+    await setRunStatus(run.run!.id, "review");
+    await lockRunWithSnapshot(
+      {
+        runId: run.run!.id,
+        clockRecords: [],
+        ratesSnapshot: [],
+        overtimeRulesSnapshot: OT_RULES,
+        holidaysSnapshot: HOLIDAYS,
+      },
+      "owner-original"
+    );
+    const beforeUnlock = await getRun(run.run!.id);
+    expect(beforeUnlock?.status).toBe("locked");
+    const reconBefore = await getReconciliation(run.run!.id);
+    expect(reconBefore).not.toBeNull();
+
+    // Wrap the run row in a Proxy that throws on assignment to
+    // `unlocked_at`. By the time that assignment runs, the splice has
+    // already removed the recon row AND the run.status flip to "review"
+    // has executed — the rollback MUST restore both. If the rollback
+    // were silently broken, the recon row would stay deleted or the
+    // run would be stuck in a half-unlocked state.
+    const findSpy = vi.spyOn(MOCK_PAYROLL_RUNS, "find");
+    let proxyApplied = false;
+    let firstWriteFailed = false;
+    findSpy.mockImplementation(function (
+      this: unknown,
+      ...args: unknown[]
+    ) {
+      const result = Array.prototype.find.apply(
+        MOCK_PAYROLL_RUNS,
+        args as Parameters<typeof Array.prototype.find>
+      );
+      if (!result) return result;
+      if (proxyApplied) return result;
+      proxyApplied = true;
+      return new Proxy(result, {
+        set(target, key, value) {
+          if (key === "unlocked_at" && !firstWriteFailed) {
+            // Throw only on the first attempt — any subsequent
+            // assignment is part of the rollback path and must be
+            // allowed through so the snapshot restore actually lands.
+            firstWriteFailed = true;
+            throw new Error("simulated DB failure on run mutation");
+          }
+          return Reflect.set(target, key, value);
+        },
+      });
+    });
+
+    try {
+      const r = await unlockRun(run.run!.id, "owner-2", "trying again");
+      expect(r.success).toBe(false);
+      expect(r.error).toMatch(/simulated DB failure/);
+    } finally {
+      findSpy.mockRestore();
+    }
+
+    // Run is back to its locked state — rollback restored the status
+    // flip from "review" back to "locked" and any partial unlock
+    // metadata writes.
     const after = await getRun(run.run!.id);
     expect(after?.status).toBe("locked");
     expect(after?.unlock_note).toBe(beforeUnlock!.unlock_note);
     expect(after?.unlocked_by).toBe(beforeUnlock!.unlocked_by);
     expect(after?.unlocked_at).toBe(beforeUnlock!.unlocked_at);
-    // Reconciliation row survives intact.
+    // Reconciliation row was deleted by the splice but restored by the
+    // rollback's idempotent re-insert.
     const reconAfter = await getReconciliation(run.run!.id);
     expect(reconAfter).not.toBeNull();
   });
